@@ -2,9 +2,9 @@
 """Deep analysis of an MT5 Strategy Tester report (PDF, Arabic or English UI)
 for the XAU HiWin EA family.
 
-    python3 analyze_tester_report.py report.pdf
+    python3 analyze_tester_report.py report.pdf   (or the .html report)
 
-Needs `pdftotext` (poppler-utils). It rebuilds every closed trade from the
+PDF needs `pdftotext` (poppler-utils); HTML needs nothing. It rebuilds every closed trade from the
 deals table, rebuilds each scalp + recovery-leg GROUP, and prints the tables
 the v39 decision was based on. All money figures are also normalised to a
 fixed 0.01 lot ("per0.01") so compounding does not hide what each rule does.
@@ -42,7 +42,28 @@ def flip(s):  # "08:50:00 2026.01.08" -> "2026.01.08 08:50:00"
     return f'{b} {a}'
 
 
+def load_html(path):
+    """MT5 'Save as report' HTML (UTF-16). Deals: time|deal|symbol|type|dir|vol|price|order|
+    commission|swap|profit|balance|comment. Orders: setup|order|symbol|type|vol|price|sl|tp|time|state|comment."""
+    import html as h
+    raw = open(path, 'rb').read()
+    s = raw.decode('utf-16') if raw[:2] in (b'\xff\xfe', b'\xfe\xff') else raw.decode('utf-8', 'replace')
+    deals, orders = [], {}
+    for row in re.findall(r'<tr.*?</tr>', s, flags=re.S):
+        c = [h.unescape(re.sub(r'<.*?>', '', x)).strip()
+             for x in re.findall(r'<t[dh][^>]*>(.*?)</t[dh]>', row, flags=re.S)]
+        if len(c) >= 12 and c[4] in ('in', 'out') and 'XAU' in c[2]:
+            deals.append(dict(cm=c[12] if len(c) > 12 else '', pl=num(c[10]), comm=num(c[8]),
+                              order=int(c[7]), price=float(c[6]), vol=float(c[5]), io=c[4],
+                              side=c[3], t=c[0]))
+        elif len(c) >= 10 and 'XAU' in c[2] and c[3].endswith('limit') and c[9] == 'filled':
+            orders[int(c[1])] = dict(sl=c[6] or None, price=float(c[5]), setup=c[0])
+    return deals, orders
+
+
 def load(pdf):
+    if pdf.lower().endswith(('.htm', '.html')):
+        return load_html(pdf)
     text = subprocess.run(['pdftotext', '-layout', pdf, '-'], capture_output=True,
                           text=True, check=True).stdout.replace('\f', '').split('\n')
     deals, orders = [], {}
