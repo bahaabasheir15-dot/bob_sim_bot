@@ -31,7 +31,8 @@
 //|  judged on price paths. Test 1.5 / 2.0 / 2.5 in the tester.
 //|
 //|  ============ CHANGE 3 (on): per-trade CSV log ==================
-//|  InpLogCsv writes Common\Files\HiWin_v39_trades.csv: every closed
+//|  InpLogCsv writes Common\Files\HiWin_v39_trades*.csv (one file per
+//|  tester run, stamped with the PC time): every closed
 //|  position with its ATR at entry, max adverse / favorable excursion
 //|  (in ATR) and the time of the worst point. With that file the group
 //|  stop above can be tuned WITHOUT guessing.
@@ -436,7 +437,8 @@ struct TrkRec
    datetime tmae;
 };
 TrkRec   gTrk[];
-string   CsvName() { return "HiWin_v39_trades.csv"; }
+string   gCsvName = "HiWin_v39_trades.csv";
+string   CsvName() { return gCsvName; }
 bool     CsvOn()   { return InpLogCsv && !MQLInfoInteger(MQL_OPTIMIZATION); }
 
 int TrkFind(ulong tk)
@@ -487,10 +489,19 @@ void TrackPositions()
 void CsvStart()
 {
    if(!CsvOn()) return;
+   //--- every tester run gets its own file, stamped with the PC clock, so a second
+   //--- test can never overwrite the first one. Live trading keeps one growing file.
+   if(MQLInfoInteger(MQL_TESTER))
+   {
+      string stamp = TimeToString(TimeLocal(), TIME_DATE | TIME_SECONDS);
+      StringReplace(stamp, ".", ""); StringReplace(stamp, ":", ""); StringReplace(stamp, " ", "_");
+      gCsvName = "HiWin_v39_trades_" + stamp + ".csv";
+   }
    bool fresh = MQLInfoInteger(MQL_TESTER) || !FileIsExist(CsvName(), FILE_COMMON);
    if(!fresh) return;
    int h = FileOpen(CsvName(), FILE_WRITE | FILE_CSV | FILE_ANSI | FILE_COMMON, ',');
    if(h == INVALID_HANDLE) { Print("HiWin: cannot create ", CsvName(), " err ", GetLastError()); return; }
+   Print("HiWin: trade log -> Common\\Files\\", CsvName());
    FileWrite(h, "pos_id", "tag", "side", "open_time", "open_price", "lots", "atr_entry",
              "close_time", "close_price", "net_pl", "exit", "mae_atr", "mfe_atr", "min_to_mae", "min_held");
    FileClose(h);
