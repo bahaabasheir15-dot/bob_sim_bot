@@ -1,4 +1,4 @@
-"""Event simulator of XAU_HiWin_EA_DUAL_LEAN_v39 on Dukascopy M1 bid/ask data.
+"""Event simulator of XAU_HiWin_EA_DUAL_LEAN_v40 (v39 = set atr_hard_min_pct=0, b_atr_min_pct=0) on Dukascopy M1 bid/ask data.
 
 It reproduces the EA's OnTick order of operations. Inside each M1 candle the
 price visits 4 points: open, then low/high (low first on a rising candle,
@@ -25,7 +25,7 @@ DEFAULTS = dict(
     use_b1=True, b_lookback=20, b_spike_min=1.8, b_atr_min=5.0, b_sl_atr=1.5, b_tp_atr=6.0,
     b_trail_start=1.5, b_trail_atr=1.5, b_max_pos=2, b_lot_mult=1.0, b_cooldown=12,
     adx_min=12.0, range_bars=12, range_min_atr=2.0,
-    atr_min_fixed=6.3, atr_lookback=576, atr_pctile=20.0, atr_hard_min=5.5, spike_mult=1.5,
+    atr_min_fixed=6.3, atr_lookback=576, atr_pctile=20.0, atr_hard_min=5.5, atr_hard_min_pct=0.12, b_atr_min_pct=0.11, spike_mult=1.5,
     lot_per_1000=0.01, fixed_lot=0.0, max_lot=5.0, max_margin_pct=30.0, max_loss_at_min_lot=5.0,
     recover_at_atr=2.0, recover_tp_atr=0.75, recover_lot_mult=1.0, group_stop_atr=0.0,
     max_positions=2, friday_filter=True, friday_stop_hour=20,
@@ -393,7 +393,8 @@ class Sim:
             if cooled:
                 avg = self.atr_avg50[k]
                 d = 0
-                if avg > 0 and a >= P['b_spike_min'] * avg and a >= P['b_atr_min']:
+                bmin = c5[k - 1] * P['b_atr_min_pct'] / 100 if P['b_atr_min_pct'] > 0 else P['b_atr_min']
+                if avg > 0 and a >= P['b_spike_min'] * avg and a >= bmin:
                     n = P['b_lookback']
                     hh = h5[k - 1 - n:k - 1].max()
                     ll = l5[k - 1 - n:k - 1].min()
@@ -443,7 +444,8 @@ class Sim:
         n = P['atr_lookback']
         hist = self.atr[k - n:k]          # bars 1..n
         rank = 100.0 * np.count_nonzero(hist < a) / n
-        if rank < P['atr_pctile'] or a < P['atr_hard_min']:
+        hard = c5[k - 1] * P['atr_hard_min_pct'] / 100 if P['atr_hard_min_pct'] > 0 else P['atr_hard_min']
+        if rank < P['atr_pctile'] or a < hard:
             return
         if P['range_bars'] > 0:
             n = P['range_bars'] + 1
