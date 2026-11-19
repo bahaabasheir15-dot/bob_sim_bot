@@ -295,7 +295,7 @@ input bool   InpRecoverHoursOnly = true;      // Never add a recovery leg outsid
 input double InpGroupStopATR     = 0.0;       // v39: when a recovery leg opens, stop the whole group this many ATR beyond the leg price (0 = OFF, keep the original 5 ATR stop)
 
 input group "Diagnostics (v39)"
-input bool   InpLogCsv           = true;      // Write every closed position to Common\Files\HiWin_v39_trades.csv (ATR, MAE, MFE)
+input bool   InpLogCsv           = true;      // Write every closed position to Common\Files\HiWin_v39_trades_<time>.csv (ATR, MAE, MFE), one file per tester run
 
 //=== globals ========================================================
 CTrade   trade;
