@@ -22,6 +22,7 @@ DEFAULTS = dict(
     start_hour=7, end_hour=21, limit_atr=0.3, limit_wait_bars=3,
     holidays=('2026.12.24', '2026.12.25', '2026.12.26', '2026.12.31', '2027.01.01'),
     use_s1=True, use_s5=True, use_s2=False, use_s3=False, use_s4=False, s2_rsi=35.0, s3_rsi=45.0, ichi_shift=26, bb_period=20, bb_dev=2.0, extreme_bars=12,
+    use_s6=False, s6_vel=2.2, s6_bars=3, s6_mid=True, s6_tp_atr=0.0, s6_sl_atr=0.0, s6_free=True, s6_with_trend=0,
     use_b1=True, b_lookback=20, b_spike_min=1.8, b_atr_min=5.0, b_sl_atr=1.5, b_tp_atr=6.0,
     b_trail_start=1.5, b_trail_atr=1.5, b_max_pos=2, b_lot_mult=1.0, b_cooldown=12,
     adx_min=12.0, range_bars=12, range_min_atr=2.0,
@@ -584,6 +585,21 @@ class Sim:
                 d, tag = 1, 'S4'
             elif ts == -1 and r1 > 100 - P['s2_rsi']:
                 d, tag = -1, 'S4'
+        if d == 0 and P['use_s6']:
+            # velocity exhaustion: a fast run of s6_bars M5 candles >= s6_vel ATR, last candle closes
+            # back past its own middle -> fade it
+            nb = P['s6_bars']
+            vel = (c5[k - 1] - c5[k - 1 - nb]) / a
+            mid = (h5[k - 1] + l5[k - 1]) / 2.0
+            if vel >= P['s6_vel'] and (c5[k - 1] < mid or not P['s6_mid']):
+                d, tag = -1, 'S6'
+            elif vel <= -P['s6_vel'] and (c5[k - 1] > mid or not P['s6_mid']):
+                d, tag = 1, 'S6'
+            if d != 0 and P['s6_with_trend'] and tr != d:
+                d = 0
+            if d != 0 and P['s6_free']:
+                self.open_trade(d, tag, bid, ask, t, a)
+                return
         if d == 0:
             return
         if tag not in ('S1', 'S4') and P['adx_min'] > 0 and self.adx[k - 1] < P['adx_min']:
@@ -753,8 +769,8 @@ class Sim:
         spread = ask - bid
         if spread > a * P['max_spread_atr']:
             return
-        sld = max(a * P['sl_atr'], spread + 0.01)
-        tpd = max(a * P['tp_atr'], spread + 0.01)
+        sld = max(a * (P['s6_sl_atr'] if tag == 'S6' and P['s6_sl_atr'] > 0 else P['sl_atr']), spread + 0.01)
+        tpd = max(a * (P['s6_tp_atr'] if tag == 'S6' and P['s6_tp_atr'] > 0 else P['tp_atr']), spread + 0.01)
         px = round(bid - P['limit_atr'] * a if d == 1 else ask + P['limit_atr'] * a, 2)
         sl = round(px - sld if d == 1 else px + sld, 2)
         tp = round(px + tpd if d == 1 else px - tpd, 2)
