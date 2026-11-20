@@ -35,7 +35,7 @@ DEFAULTS = dict(
     use_ldn=False, ldn_start=3, ldn_end=9, ldn_close=21, ldn_tp=1.0, ldn_lot_mult=0.5, ldn_against_mult=1.0, ldn_risk_pct=0.0, ldn_be_at=0.0, ldn_sl_mult=1.0, ldn_last_entry=19, ldn_min_rng_atr=0.0, ldn_max_rng_atr=99.0, ldn_be_lock=0.05, ldn_sar=False,
     dd_throttle_pct=0.0, dd_throttle_mult=0.5, month_stop_pct=0.0, withdraw_pct=0.0,
     use_trend=False, tr_n=55, tr_sl_atr=3.0, tr_trail_atr=4.0, tr_risk_pct=0.5, tr_max_minlot_risk=0.0, tr_safe_hours=False,
-    use_night=False, night_entry_min=65, night_exit_min=240, night_skip_monday=True, night_lot_mult=1.0, night_sl_pct=1.0, night_min_prev_pct=0.0, night_quiet_mult=0.0, ldn_skip_from=99, ldn_skip_to=99,
+    use_night=False, night_entry_min=65, night_exit_min=240, night_skip_monday=True, night_lot_mult=1.0, night_sl_pct=1.0, night_min_prev_pct=0.0, night_quiet_mult=0.0, night_after_loss_mult=1.0, ldn_skip_from=99, ldn_skip_to=99,
     deposit=5000.0,
 )
 
@@ -589,6 +589,11 @@ class Sim:
                 if P['night_quiet_mult'] <= 0:
                     return
                 mult *= P['night_quiet_mult']
+        if P['night_after_loss_mult'] != 1.0:    # bigger night trade after a losing day of the bot
+            yday = t // 86400 - 1
+            pl = sum(x.net for x in self.trades if x.t_close // 86400 == yday)
+            if pl < 0:
+                mult *= P['night_after_loss_mult']
         lot = self.calc_lot(ask, sld, bid, ask) * mult
         lot = max(0.01, math.floor(lot / 0.01 + 1e-9) * 0.01)
         self.open_pos('N1', True, lot, ask, round(ask - sld, 2), 0.0, t, sld)

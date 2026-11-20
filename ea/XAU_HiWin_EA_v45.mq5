@@ -25,6 +25,12 @@
 //|  least 1% (up or down). Every threshold 0.5-1.5% beat "every night"
 //|  in every year (fixed lot: DD 170 -> 100, PF 1.36 -> 2.28).
 //|  $5,000 account: final 129,222, max DD 9.6%, worst month -3.3%.
+//|  v45.2: night lot 0.25 -> 1.0 x the normal lot. 2023-2026, $5,000:
+//|     final 122,327 -> 249,773   max DD 15.8% -> 15.3%
+//|     worst month -4.1% -> -3.8%   2023 -328 -> -229
+//|     worst single night -0.6% -> -2.6% of the account
+//|  (1.5x and 2x earn more, but one bad night costs 3.9% / 5.2%;
+//|   at 3x the drawdown jumps to 18.9%.)
 //|  Switch the engine off with InpUseNight = false.
 //+------------------------------------------------------------------+
 //+------------------------------------------------------------------+
@@ -281,7 +287,7 @@
 //|  Test on DEMO first. Needs M5 (the EA reads M5/M15 itself).      |
 //+------------------------------------------------------------------+
 #property copyright "XAU HiWin"
-#property version   "45.10"
+#property version   "45.20"
 #property description "XAU HiWin v45: v44.2 + night drift engine. magic 20263255."
 
 #include <Trade\Trade.mqh>
@@ -427,7 +433,7 @@ input bool   InpUseNight        = true;       // buy gold in the first hours of 
 input int    InpNightEntryMin   = 65;         // enter at this minute of the day, Vantage time (65 = 01:05)
 input int    InpNightExitMin    = 240;        // close at this minute of the day (240 = 04:00)
 input bool   InpNightSkipMonday = true;       // no trade on Monday (week-open gap and spreads)
-input double InpNightLotMult    = 0.25;       // lot = normal sizing rule x this
+input double InpNightLotMult    = 1.0;        // lot = normal sizing rule x this (v45.2: 0.25 -> 1.0)
 input double InpNightSLpct      = 0.5;        // catastrophe stop, % of price
 input double InpNightMaxMinLot  = 2.0;        // skip if even the smallest lot would lose more than this % of equity at the stop
 input double InpNightMaxSpreadPct = 0.02;     // skip if the spread is wider than this % of price
