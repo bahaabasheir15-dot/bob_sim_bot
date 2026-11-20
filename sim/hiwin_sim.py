@@ -18,7 +18,7 @@ from . import indicators as ind
 from .data import resample
 
 DEFAULTS = dict(
-    tp_atr=0.5, sl_atr=5.0, time_stop_bars=48, max_spread_atr=0.10,
+    tp_atr=0.5, sl_atr=5.0, time_stop_bars=48, be_after_bars=0, be_scope='orig', max_spread_atr=0.10,
     start_hour=7, end_hour=21, limit_atr=0.3, limit_wait_bars=3,
     holidays=('2026.12.24', '2026.12.25', '2026.12.26', '2026.12.31', '2027.01.01'),
     use_s1=True, use_s5=True, use_s2=False, use_s3=False, use_s4=False, s2_rsi=35.0, s3_rsi=45.0, ichi_shift=26, bb_period=20, bb_dev=2.0, extreme_bars=12,
@@ -34,7 +34,7 @@ DEFAULTS = dict(
     commission_per_lot_side=3.0, leverage=100.0, contract=100.0,
     use_ldn=False, ldn_start=3, ldn_end=9, ldn_close=21, ldn_tp=1.0, ldn_lot_mult=0.5, ldn_against_mult=1.0, ldn_risk_pct=0.0, ldn_be_at=0.0, ldn_sl_mult=1.0, ldn_last_entry=19, ldn_min_rng_atr=0.0, ldn_max_rng_atr=99.0, ldn_be_lock=0.05, ldn_sar=False,
     dd_throttle_pct=0.0, dd_throttle_mult=0.5, month_stop_pct=0.0, withdraw_pct=0.0,
-    use_trend=False, tr_n=55, tr_sl_atr=3.0, tr_trail_atr=4.0, tr_risk_pct=0.5, tr_max_minlot_risk=0.0,
+    use_trend=False, tr_n=55, tr_sl_atr=3.0, tr_trail_atr=4.0, tr_risk_pct=0.5, tr_max_minlot_risk=0.0, tr_safe_hours=False,
     use_night=False, night_entry_min=65, night_exit_min=240, night_skip_monday=True, night_lot_mult=1.0, night_sl_pct=1.0, night_min_prev_pct=0.0, night_quiet_mult=0.0, ldn_skip_from=99, ldn_skip_to=99,
     deposit=5000.0,
 )
@@ -353,6 +353,18 @@ class Sim:
                     for x in list(self.pos):
                         self.close_pos(x, bid if x.buy else ask, t, 'emergency')
                     self.locked = True
+            # ---- break-even exit after N bars (idea from the ALLYLLA bot): an old trade that is
+            # ---- back at or above its entry is closed instead of being left to run
+            if P['be_after_bars'] > 0:
+                has_leg = {y.parent for y in self.pos if y.tag == 'R'}
+                for x in list(self.pos):
+                    if x.tag not in ('S1', 'S4', 'S5') or t - x.t_open < P['be_after_bars'] * 300:
+                        continue
+                    if P['be_scope'] == 'orig' and x.id in has_leg:
+                        continue
+                    pnl = (bid - x.op) if x.buy else (x.op - ask)
+                    if pnl >= 0:
+                        self.close_pos(x, bid if x.buy else ask, t, 'be_time')
             # ---- time stop (not B1)
             for x in list(self.pos):
                 if x.tag not in ('B1', 'L1', 'T1', 'N1') and t - x.t_open >= P['time_stop_bars'] * 300:
@@ -596,6 +608,15 @@ class Sim:
                 x.sl = ns
         if any(x.tag == 'T1' for x in self.pos) or self.locked:
             return
+        if P['tr_safe_hours']:      # ALLYLLA-style filters: rollover and weekend edges
+            d = dt.datetime.utcfromtimestamp(t)
+            mod = d.hour * 60 + d.minute
+            if mod >= 23 * 60 + 45 or mod < 30:
+                return                                       # 15 min before / 30 min after rollover
+            if d.weekday() == 4 and d.hour >= 21:
+                return                                       # last hours before the weekend
+            if d.weekday() == 0 and d.hour < 6:
+                return                                       # first 6 hours after the market opens
         c = self.h1['c'][j]
         d = 1 if c > self.h1hh[j - 1] else -1 if c < self.h1ll[j - 1] else 0
         if d == 0:
