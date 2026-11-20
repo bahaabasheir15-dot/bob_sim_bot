@@ -42,5 +42,8 @@ Tighter group stop, removing the recovery leg, break-even moves, second-chance r
 - **MyAiGold** (MQL5 market, $900, AI, published 2026-09-04): per 0.01 lot +1,010 / +1,787 / +1,939 / +1,680 (2023-2026), monthly correlation with our bot 0.11 — a good companion if its live signals keep working; use Balance Step >= 1000. v44.1+ counts its own daily loss only, so it can share an account.
 - **ALLYLLA Pullback Bot**: lost in 2023, correlation 0.83 with ours — not a useful companion.
 
+## Automatic research
+A scheduled job runs every 2 hours and follows `research/PROTOCOL.md`: one idea from `research/IDEAS.md` per run, results in `research/RESULTS_AR.md` (Arabic). Read those files to see what it found.
+
 ## Git
 Work on branch `claude/bot-analysis-optimization-82i7f1`; commit and push there.
