@@ -22,6 +22,7 @@ DEFAULTS = dict(
     start_hour=7, end_hour=21, limit_atr=0.3, limit_wait_bars=3,
     holidays=('2026.12.24', '2026.12.25', '2026.12.26', '2026.12.31', '2027.01.01'),
     use_s1=True, use_s5=True, use_s2=False, use_s3=False, use_s4=False, s2_rsi=35.0, s3_rsi=45.0, ichi_shift=26, bb_period=20, bb_dev=2.0, extreme_bars=12,
+    use_s7=False, s7_n=6, s7_comp=1.6, s7_body=1.1, use_s8=False, s8_burst=2.0, use_s9=False, s9_k=2.0, s9_mode='conf', s9_vol=1.5, s9_trend=True, s789_free=True,
     use_s6=False, s6_vel=2.2, s6_bars=3, s6_mid=True, s6_tp_atr=0.0, s6_sl_atr=0.0, s6_free=True, s6_with_trend=0,
     use_b1=True, b_lookback=20, b_spike_min=1.8, b_atr_min=5.0, b_sl_atr=1.5, b_tp_atr=6.0,
     b_trail_start=1.5, b_trail_atr=1.5, b_max_pos=2, b_lot_mult=1.0, b_cooldown=12,
@@ -100,6 +101,7 @@ class Sim:
         m1 = self.m1
         b5 = resample(m1, 5)
         self.b5 = b5
+        self.v5 = np.add.reduceat(m1['v'].astype(float), b5['first']) if 'v' in m1 else None
         h, l, c = b5['h'], b5['l'], b5['c']
         self.atr = ind.atr(h, l, c, 14)
         self.adx = ind.adx(h, l, c, 14)
@@ -585,6 +587,38 @@ class Sim:
                 d, tag = 1, 'S4'
             elif ts == -1 and r1 > 100 - P['s2_rsi']:
                 d, tag = -1, 'S4'
+        if d == 0 and (P['use_s7'] or P['use_s8'] or P['use_s9']):
+            o5 = self.b5['o']
+            if P['use_s7']:      # compression -> impulse breakout, with the M15 EMA50
+                n = P['s7_n']
+                hm, lm = h5[k - 1 - n:k - 1].max(), l5[k - 1 - n:k - 1].min()
+                e = self.e50[self.m15_of_m5[k] - 1]
+                if hm - lm < P['s7_comp'] * a:
+                    body = c5[k - 1] - o5[k - 1]
+                    if body >= P['s7_body'] * a and h5[k - 1] > hm and c5[k - 1] > e:
+                        d, tag = 1, 'S7'
+                    elif -body >= P['s7_body'] * a and l5[k - 1] < lm and c5[k - 1] < e:
+                        d, tag = -1, 'S7'
+            if d == 0 and P['use_s8']:   # burst (Close[2]-Close[5]) then a pause candle
+                bu = (c5[k - 2] - c5[k - 5]) / a
+                mid = (h5[k - 1] + l5[k - 1]) / 2.0
+                slow = abs(c5[k - 1] - c5[k - 2]) < abs(c5[k - 2] - c5[k - 3])
+                if bu >= P['s8_burst'] and h5[k - 1] <= h5[k - 2] and c5[k - 1] < mid and slow:
+                    d, tag = -1, 'S8'
+                elif bu <= -P['s8_burst'] and l5[k - 1] >= l5[k - 2] and c5[k - 1] > mid and slow:
+                    d, tag = 1, 'S8'
+            if d == 0 and P['use_s9'] and self.v5 is not None:   # price move vs tick pace
+                mv = abs(c5[k - 1] - c5[k - 3])
+                avg = np.abs(np.diff(c5[k - 22:k - 1])).mean() * 2
+                vr = self.v5[k - 2:k].mean() / max(self.v5[k - 22:k - 2].mean(), 1e-9)
+                if avg > 0 and mv >= P['s9_k'] * avg:
+                    ok = vr >= P['s9_vol'] if P['s9_mode'] == 'conf' else vr <= P['s9_vol']
+                    dd_ = 1 if c5[k - 1] > o5[k - 1] else -1
+                    if ok and (not P['s9_trend'] or tr == dd_):
+                        d, tag = dd_, 'S9'
+            if d != 0 and P['s789_free']:
+                self.open_trade(d, tag, bid, ask, t, a)
+                return
         if d == 0 and P['use_s6']:
             # velocity exhaustion: a fast run of s6_bars M5 candles >= s6_vel ATR, last candle closes
             # back past its own middle -> fade it

@@ -19,6 +19,12 @@ def _init(path):
     global _M1
     from .data import load_npz
     _M1 = load_npz(path)
+    import os, numpy as _np
+    vp = os.path.join(os.path.dirname(path) or '.', 'xauusd_plus_m1_tickvol.npz')
+    if os.path.exists(vp):
+        v = _np.load(vp)['v']
+        if len(v) == len(_M1['t']):
+            _M1['v'] = v
 
 
 def year_stats(tr, years=('2023', '2024', '2025', '2026')):
