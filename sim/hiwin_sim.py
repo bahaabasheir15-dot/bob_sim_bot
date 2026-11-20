@@ -32,7 +32,7 @@ DEFAULTS = dict(
     max_open_risk_pct=20.0, daily_loss_pct=10.0, emergency_float_pct=25.0,
     recover_spike_guard=True, recover_hours_only=True,
     commission_per_lot_side=3.0, leverage=100.0, contract=100.0,
-    use_ldn=False, ldn_start=3, ldn_end=9, ldn_close=21, ldn_tp=1.0, ldn_lot_mult=0.5, ldn_against_mult=1.0, ldn_risk_pct=0.0, ldn_be_at=0.0, ldn_sl_mult=1.0, ldn_last_entry=19, ldn_min_rng_atr=0.0, ldn_max_rng_atr=99.0, ldn_be_lock=0.05, ldn_sar=False,
+    use_ldn=False, ldn_start=3, ldn_end=9, ldn_close=21, ldn_tp=1.0, ldn_lot_mult=0.5, ldn_against_mult=1.0, ldn_risk_pct=0.0, ldn_be_at=0.0, ldn_sl_mult=1.0, ldn_last_entry=19, ldn_min_rng_atr=0.0, ldn_max_rng_atr=99.0, ldn_min_rng_d1=0.0, ldn_max_rng_d1=99.0, ldn_buffer_atr=0.0, ldn_stop_entry=False, ldn_stop_on_ask=False, ldn_fill_at_level=False, ldn_be_lock=0.05, ldn_sar=False,
     dd_throttle_pct=0.0, dd_throttle_mult=0.5, month_stop_pct=0.0, withdraw_pct=0.0,
     use_trend=False, tr_n=55, tr_sl_atr=3.0, tr_trail_atr=4.0, tr_risk_pct=0.5, tr_max_minlot_risk=0.0, tr_safe_hours=False,
     use_night=False, night_entry_min=65, night_exit_min=240, night_skip_monday=True, night_lot_mult=1.0, night_sl_pct=1.0, night_min_prev_pct=0.0, night_quiet_mult=0.0, night_after_loss_mult=1.0, ldn_skip_from=99, ldn_skip_to=99,
@@ -122,6 +122,7 @@ class Sim:
         self.m5_of_m1 = np.searchsorted(b5['t'], m1['t'], side='right') - 1
         d1 = resample(m1, 1440)
         self.d1t, self.d1o, self.d1c = d1['t'], d1['o'], d1['c']
+        self.d1atr = ind.atr(d1['h'], d1['l'], d1['c'], 14)
         h1 = resample(m1, 60)
         self.h1 = h1
         self.h1t = h1['t']
@@ -404,6 +405,8 @@ class Sim:
             for o in list(self.pend):
                 if shut or t - o.t_setup >= max(1, P['limit_wait_bars']) * 300:
                     self.pend.remove(o)
+        if P['use_ldn'] and P['ldn_stop_entry'] and k >= 600 and not self.locked and not self.is_holiday(t):
+            self.check_london(bid, ask, t, k, tick=True)
         if newbar:
             self.new_bar(bid, ask, t, k)
 
@@ -503,7 +506,7 @@ class Sim:
                     self.last_break = self.b5['t'][k]
         # ---- position gate
         # ---- engine L
-        if P['use_ldn']:
+        if P['use_ldn'] and not P['ldn_stop_entry']:
             self.check_london(bid, ask, t, k)
         orig = sum(1 for x in self.pos if x.tag not in ('R', 'B1', 'L1', 'T1', 'N1'))
         if orig + len(self.pend) >= P['max_positions']:
@@ -635,10 +638,12 @@ class Sim:
         lot = max(0.01, min(math.floor(lot / 0.01 + 1e-9) * 0.01, P['max_lot']))
         self.open_pos('T1', d == 1, lot, entry, round(entry - d * sld, 2), 0.0, t, a)
 
-    def check_london(self, bid, ask, t, k):
+    def check_london(self, bid, ask, t, k, tick=False):
         P = self.p
-        b1 = int(self.b5['t'][k - 1])
+        b1 = int(t) if tick else int(self.b5['t'][k - 1])
         day0 = b1 - b1 % 86400
+        if tick and self.ldn_day == day0 and not P['ldn_sar']:
+            return
         if P['month_stop_pct'] > 0 and self.balance < self.month_start * (1 - P['month_stop_pct'] / 100.0):
             return
         second = False
@@ -653,17 +658,27 @@ class Sim:
             return
         if P['ldn_skip_from'] <= h < P['ldn_skip_to']:
             return
-        hi, lo = -1e18, 1e18
-        sh = k - 1
-        while sh >= 0 and self.b5['t'][sh] >= day0:
-            hh = (int(self.b5['t'][sh]) % 86400) // 3600
-            if P['ldn_start'] <= hh < P['ldn_end']:
-                hi = max(hi, self.b5['h'][sh]); lo = min(lo, self.b5['l'][sh])
-            sh -= 1
+        box = getattr(self, 'ldn_box', None)
+        if box is not None and box[0] == day0:
+            hi, lo = box[1], box[2]
+        else:
+            hi, lo = -1e18, 1e18
+            sh = k - 1
+            while sh >= 0 and self.b5['t'][sh] >= day0:
+                hh = (int(self.b5['t'][sh]) % 86400) // 3600
+                if P['ldn_start'] <= hh < P['ldn_end']:
+                    hi = max(hi, self.b5['h'][sh]); lo = min(lo, self.b5['l'][sh])
+                sh -= 1
+            self.ldn_box = (day0, hi, lo)
         if not hi > lo:
             return
-        c1 = self.b5['c'][k - 1]
-        d = 1 if c1 > hi else -1 if c1 < lo else 0
+        buf = P['ldn_buffer_atr'] * self.atr[k - 1]
+        if tick:
+            up = (ask >= hi + buf) if P['ldn_stop_on_ask'] else (bid > hi + buf)
+            d = 1 if up else -1 if bid < lo - buf else 0
+        else:
+            c1 = self.b5['c'][k - 1]
+            d = 1 if c1 > hi + buf else -1 if c1 < lo - buf else 0
         if d == 0:
             return
         if second:
@@ -674,10 +689,16 @@ class Sim:
         if any(x.tag == 'L1' for x in self.pos):
             return
         entry = ask if d == 1 else bid
+        if tick and P['ldn_fill_at_level']:          # stop order filled exactly at its level
+            entry = (hi + buf + (ask - bid)) if d == 1 else (lo - buf)
         rng = max(hi - lo, 0.5)
         a5 = self.atr[k - 1]
         if a5 > 0 and not (P['ldn_min_rng_atr'] <= rng / a5 < P['ldn_max_rng_atr']):
             return
+        if P['ldn_min_rng_d1'] > 0 or P['ldn_max_rng_d1'] < 99:
+            j = np.searchsorted(self.d1t, t, side='right') - 2           # last closed daily candle
+            if j >= 0 and self.d1atr[j] > 0 and not (P['ldn_min_rng_d1'] <= rng / self.d1atr[j] < P['ldn_max_rng_d1']):
+                return
         if P['ldn_risk_pct'] > 0:      # fixed % of equity lost if the stop is hit
             lot = self.equity(bid, ask) * P['ldn_risk_pct'] / 100.0 / (rng * P['contract'])
             lot = min(lot, P['max_lot'])
