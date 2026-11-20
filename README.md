@@ -10,6 +10,8 @@
 | `ea/XAU_HiWin_EA_v43.mq5` | v43: v42 + scalper setup S4 + H1 trend engine (T1) at 0.25% risk (magic 20263253) |
 | `ea/XAU_HiWin_EA_v44.mq5` | v44: v43 with wider stops (scalper 7 ATR, London 1.75 range widths) (magic 20263254) |
 | `ea/XAU_HiWin_EA_v45.mq5` | v45: v44.2 + night-drift engine N (buy 01:05, sell 04:00 Vantage time) (magic 20263255) |
+| `data/` | Vantage XAUUSD+ M1 2023-2026 (compact npz) for the simulator |
+| `CLAUDE.md` | Project memory: current state, accounts, tools, rejected ideas |
 | `sim/` | Python simulator of the EA on M1 data (Dukascopy or an MT5 bar export) |
 | `analysis/v38_deep_analysis_AR.md` | Deep analysis of the v38 tester report and the v39 test plan (Arabic) |
 | `analysis/analyze_tester_report.py` | Rebuilds trades and recovery groups from any MT5 tester-report PDF: `python3 analysis/analyze_tester_report.py report.pdf` (needs `pdftotext`) |

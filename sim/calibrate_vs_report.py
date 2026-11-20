@@ -15,8 +15,8 @@ from .hiwin_sim import Sim
 
 def load_m1(path):
     if path.endswith('.npz'):
-        z = np.load(path)
-        return {k: z[k] for k in z.files}
+        from .data import load_npz
+        return load_npz(path)
     return load_mt5_csv(path)
 
 

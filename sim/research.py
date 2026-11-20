@@ -17,8 +17,8 @@ _M1 = None
 
 def _init(path):
     global _M1
-    z = np.load(path)
-    _M1 = {k: z[k] for k in z.files}
+    from .data import load_npz
+    _M1 = load_npz(path)
 
 
 def year_stats(tr, years=('2023', '2024', '2025', '2026')):

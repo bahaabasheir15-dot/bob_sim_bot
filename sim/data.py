@@ -93,3 +93,17 @@ def load_mt5_csv(path, point=0.01):
     t = np.array(t, dtype=np.int64)
     o, h, l, c, sp = (np.array(x) for x in (o, h, l, c, sp))
     return dict(t=t, bo=o, bh=h, bl=l, bc=c, ao=o + sp, ah=h + sp, al=l + sp, ac=c + sp)
+
+
+def load_npz(path):
+    """Load M1 data saved by this project: either the full float format, or the compact repo file
+    data/xauusd_plus_m1_2023_2026.npz (prices in cents as int32, one bar spread `sp` in cents)."""
+    z = np.load(path)
+    if 'sp' not in z.files:
+        return {k: z[k] for k in z.files}
+    sp = z['sp'].astype(np.float64) / 100.0
+    out = {'t': z['t'].astype(np.int64)}
+    for k in ('bo', 'bh', 'bl', 'bc'):
+        out[k] = z[k].astype(np.float64) / 100.0
+    out['ao'], out['ah'], out['al'], out['ac'] = out['bo'] + sp, out['bh'] + sp, out['bl'] + sp, out['bc'] + sp
+    return out
