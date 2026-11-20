@@ -43,7 +43,7 @@ Tighter group stop, removing the recovery leg, break-even moves, second-chance r
 - **ALLYLLA Pullback Bot**: lost in 2023, correlation 0.83 with ours — not a useful companion.
 
 ## Automatic research
-A scheduled job runs every 2 hours and follows `research/PROTOCOL.md`: one idea from `research/IDEAS.md` per run, results in `research/RESULTS_AR.md` (Arabic). Read those files to see what it found.
+A scheduled job (trigger `trig_0126ag9zXpizb4C1oneAWY1z`, every 2 hours) was set up and then DISABLED at the user's request on 2026-11-20. If re-enabled, it follows `research/PROTOCOL.md`: one idea from `research/IDEAS.md` per run, results in `research/RESULTS_AR.md` (Arabic). Read those files to see what it found.
 
 ## Git
 Work on branch `claude/bot-analysis-optimization-82i7f1`; commit and push there.
