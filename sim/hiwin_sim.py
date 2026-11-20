@@ -32,7 +32,8 @@ DEFAULTS = dict(
     max_open_risk_pct=20.0, daily_loss_pct=10.0, emergency_float_pct=25.0,
     recover_spike_guard=True, recover_hours_only=True,
     commission_per_lot_side=3.0, leverage=100.0, contract=100.0,
-    use_ldn=False, ldn_start=3, ldn_end=9, ldn_close=21, ldn_tp=1.0, ldn_lot_mult=0.5, ldn_against_mult=1.0, ldn_risk_pct=0.0, ldn_skip_from=99, ldn_skip_to=99,
+    use_ldn=False, ldn_start=3, ldn_end=9, ldn_close=21, ldn_tp=1.0, ldn_lot_mult=0.5, ldn_against_mult=1.0, ldn_risk_pct=0.0, ldn_be_at=0.0, ldn_be_lock=0.05, ldn_sar=False,
+    dd_throttle_pct=0.0, dd_throttle_mult=0.5, month_stop_pct=0.0, withdraw_pct=0.0, ldn_skip_from=99, ldn_skip_to=99,
     deposit=5000.0,
 )
 
@@ -153,6 +154,8 @@ class Sim:
             lot = P['fixed_lot']
         else:
             lot = eq / 1000.0 * P['lot_per_1000']
+        if P['dd_throttle_pct'] > 0 and self.balance < self.peak * (1 - P['dd_throttle_pct'] / 100.0):
+            lot *= P['dd_throttle_mult']          # account below its peak: trade smaller until it recovers
         lot = math.floor(lot / 0.01 + 1e-9) * 0.01
         if lot < 0.01:
             if lpl * 0.01 > eq * P['max_loss_at_min_lot'] / 100.0:
@@ -211,6 +214,9 @@ class Sim:
         g = ((price - x.op) if x.buy else (x.op - price)) * x.lots * cs
         self.balance += g - self._comm(x.lots)
         self.pos.remove(x)
+        self.peak = max(self.peak, self.balance)
+        if x.tag == 'L1' and why == 'sl':
+            self.ldn_stop = (x.t_open // 86400, 1 if x.buy else -1)
         self.trades.append(Trade(x.id, x.tag, x.buy, x.lots, x.op, price, x.t_open, t,
                                  g - 2 * self._comm(x.lots), why, x.atr_e, x.parent, x.mae, x.mfe))
 
@@ -226,6 +232,13 @@ class Sim:
         self.locked = False
         self.last_break = -10**12
         self.ldn_day = None
+        self.ldn_stop = None      # (day, dir) of today's stopped London trade
+        self.ldn_second = None
+        self.peak = self.balance
+        self.month = None
+        self.withdrawn = 0.0
+        self.withdrawals = []
+        self.month_start = self.balance
         self.k_loaded = -1
         last_k = -1
         self.eq_curve = []
@@ -282,6 +295,19 @@ class Sim:
     def on_tick(self, bid, ask, t, k, newbar):
         P = self.p
         # ---- UpdateDay
+        mo = dt.datetime.utcfromtimestamp(t).month
+        if mo != self.month:
+            # monthly withdrawal: take a share of last month's profit out of the account
+            if self.month is not None and P['withdraw_pct'] > 0 and not self.pos:
+                prof = self.balance - self.month_start
+                if prof > 0:
+                    w = prof * P['withdraw_pct'] / 100.0
+                    self.balance -= w
+                    self.withdrawn += w
+                    self.withdrawals.append((t, w))
+                self.peak = self.balance
+            self.month = mo
+            self.month_start = self.balance
         day = t // 86400
         if day != self.day:
             self.day = day
@@ -308,6 +334,13 @@ class Sim:
                 for x in list(self.pos):
                     if x.tag == 'L1' and ((t % 86400) // 3600 >= P['ldn_close'] or x.t_open // 86400 < t // 86400):
                         self.close_pos(x, bid if x.buy else ask, t, 'ldn_close')
+            # ---- London break-even
+            if P['use_ldn'] and P['ldn_be_at'] > 0:
+                for x in self.pos:
+                    if x.tag == 'L1' and x.mfe >= P['ldn_be_at'] * x.atr_e:
+                        lock = x.op + (P['ldn_be_lock'] * x.atr_e if x.buy else -P['ldn_be_lock'] * x.atr_e)
+                        if (x.buy and lock > x.sl) or (not x.buy and lock < x.sl):
+                            x.sl = round(lock, 2)
             # ---- B1 trailing (atr from the last loaded bar)
             if P['use_b1'] and self.k_loaded > 0:
                 a = self.atr[self.k_loaded - 1]
@@ -476,8 +509,15 @@ class Sim:
         P = self.p
         b1 = int(self.b5['t'][k - 1])
         day0 = b1 - b1 % 86400
-        if self.ldn_day == day0:
+        if P['month_stop_pct'] > 0 and self.balance < self.month_start * (1 - P['month_stop_pct'] / 100.0):
             return
+        second = False
+        if self.ldn_day == day0:
+            # second chance: today's trade was stopped -> trade the break of the OTHER side once
+            if not (P['ldn_sar'] and self.ldn_stop and self.ldn_stop[0] == day0 // 86400
+                    and self.ldn_second != day0):
+                return
+            second = True
         h = (b1 % 86400) // 3600
         if h < P['ldn_end'] or h >= P['ldn_close'] - 2:
             return
@@ -496,6 +536,10 @@ class Sim:
         d = 1 if c1 > hi else -1 if c1 < lo else 0
         if d == 0:
             return
+        if second:
+            if d != -self.ldn_stop[1]:
+                return
+            self.ldn_second = day0
         self.ldn_day = day0
         if any(x.tag == 'L1' for x in self.pos):
             return
