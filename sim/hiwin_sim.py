@@ -32,7 +32,7 @@ DEFAULTS = dict(
     max_open_risk_pct=20.0, daily_loss_pct=10.0, emergency_float_pct=25.0,
     recover_spike_guard=True, recover_hours_only=True,
     commission_per_lot_side=3.0, leverage=100.0, contract=100.0,
-    use_ldn=False, ldn_start=3, ldn_end=9, ldn_close=21, ldn_tp=1.0, ldn_lot_mult=0.5,
+    use_ldn=False, ldn_start=3, ldn_end=9, ldn_close=21, ldn_tp=1.0, ldn_lot_mult=0.5, ldn_against_mult=1.0, ldn_risk_pct=0.0, ldn_skip_from=99, ldn_skip_to=99,
     deposit=5000.0,
 )
 
@@ -117,6 +117,10 @@ class Sim:
         for i in range(52, n):
             self.atr_avg50[i] = (cs[i - 1] - cs[i - 51]) / 50.0
         self.m5_of_m1 = np.searchsorted(b5['t'], m1['t'], side='right') - 1
+        h1 = resample(m1, 60)
+        self.h1t = h1['t']
+        self.h1e50 = ind.ema(h1['c'], 50)
+        self.h1e200 = ind.ema(h1['c'], 200)
 
     def trend(self, k):
         """TrendDir() at new M5 bar k (bar0 = k). M15 shift 1 = bar before the one containing now."""
@@ -477,6 +481,8 @@ class Sim:
         h = (b1 % 86400) // 3600
         if h < P['ldn_end'] or h >= P['ldn_close'] - 2:
             return
+        if P['ldn_skip_from'] <= h < P['ldn_skip_to']:
+            return
         hi, lo = -1e18, 1e18
         sh = k - 1
         while sh >= 0 and self.b5['t'][sh] >= day0:
@@ -495,7 +501,16 @@ class Sim:
             return
         entry = ask if d == 1 else bid
         rng = max(hi - lo, 0.5)
-        lot = self.calc_lot(entry, rng, bid, ask) * P['ldn_lot_mult']
+        if P['ldn_risk_pct'] > 0:      # fixed % of equity lost if the stop is hit
+            lot = self.equity(bid, ask) * P['ldn_risk_pct'] / 100.0 / (rng * P['contract'])
+            lot = min(lot, P['max_lot'])
+        else:
+            lot = self.calc_lot(entry, rng, bid, ask) * P['ldn_lot_mult']
+        hi1 = np.searchsorted(self.h1t, t, side='right') - 2          # last closed H1 candle
+        if hi1 >= 0 and d * (self.h1e50[hi1] - self.h1e200[hi1]) < 0:
+            lot *= P['ldn_against_mult']                              # breakout against the H1 trend
+            if lot < 0.01 - 1e-9 and P['ldn_against_mult'] == 0:
+                return
         lot = max(0.01, math.floor(lot / 0.01 + 1e-9) * 0.01)
         self.open_pos('L1', d == 1, lot, entry, round(entry - d * rng, 2), round(entry + d * P['ldn_tp'] * rng, 2), t, rng)
 

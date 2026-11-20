@@ -168,3 +168,68 @@ def rsi2_pullback(m1, tf=60, lo=10, hi=90, trend=200):
         return (d == 1 and c[i] > sma5[i]) or (d == -1 and c[i] < sma5[i])
 
     return run_engine(m1, tf, sig, dict(sl=lambda bb, i: 3 * a[i], exit_fn=ex, max_bars=24), name=f'RSI2-{tf}')
+
+
+def session_breakout(m1, start_h, end_h, trade_until_h, close_h, tp_mult=1.0, name='SES', fade=False):
+    """Generic version of london_breakout: range of server hours [start_h, end_h), first M5 close
+    outside it between end_h and trade_until_h is traded (or faded), stop = one range width,
+    target = tp_mult range widths, flat at close_h."""
+    b = resample(m1, 5)
+    t = b['t']
+    day = t // 86400
+    h = _hour(t)
+    rng_hi, rng_lo = {}, {}
+    for i in range(len(t)):
+        if start_h <= h[i] < end_h:
+            dd = day[i]
+            rng_hi[dd] = max(rng_hi.get(dd, -1e9), b['h'][i])
+            rng_lo[dd] = min(rng_lo.get(dd, 1e9), b['l'][i])
+    done = set()
+
+    def sig(bb, i):
+        dd = day[i]
+        if dd in done or not (end_h <= h[i] < trade_until_h) or dd not in rng_hi:
+            return 0
+        d = 1 if bb['c'][i] > rng_hi[dd] else -1 if bb['c'][i] < rng_lo[dd] else 0
+        if d:
+            done.add(dd)
+        return -d if fade else d
+
+    def sl(bb, i):
+        return max(rng_hi[day[i]] - rng_lo[day[i]], 0.5)
+
+    return run_engine(m1, 5, sig, dict(sl=sl, tp=lambda bb, i: tp_mult * sl(bb, i),
+                                        exit_fn=lambda bb, i, d: h[i] >= close_h or day[i] != day[i - 1]), name=name)
+
+
+def prev_day_breakout(m1, trade_from=9, close_h=21, tp_mult=1.0, name='PDB'):
+    """Break of yesterday's high / low (server days), stop = half of yesterday's range."""
+    b = resample(m1, 5)
+    t = b['t']
+    day = t // 86400
+    h = _hour(t)
+    dh, dl = {}, {}
+    for i in range(len(t)):
+        dh[day[i]] = max(dh.get(day[i], -1e9), b['h'][i])
+        dl[day[i]] = min(dl.get(day[i], 1e9), b['l'][i])
+    days = sorted(dh)
+    prev = {days[k]: days[k - 1] for k in range(1, len(days))}
+    done = set()
+
+    def sig(bb, i):
+        dd = day[i]
+        if dd in done or dd not in prev or not (trade_from <= h[i] < close_h - 2):
+            return 0
+        p = prev[dd]
+        if bb['c'][i] > dh[p]:
+            done.add(dd); return 1
+        if bb['c'][i] < dl[p]:
+            done.add(dd); return -1
+        return 0
+
+    def sl(bb, i):
+        p = prev[day[i]]
+        return max((dh[p] - dl[p]) * 0.5, 0.5)
+
+    return run_engine(m1, 5, sig, dict(sl=sl, tp=lambda bb, i: tp_mult * sl(bb, i),
+                                        exit_fn=lambda bb, i, d: h[i] >= close_h or day[i] != day[i - 1]), name=name)
