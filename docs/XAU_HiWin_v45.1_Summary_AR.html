@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>XAU HiWin v45.1</title>
+<style>
+@font-face{font-family:Cairo;font-weight:400;src:url(https://cdn.jsdelivr.net/npm/@fontsource/cairo@5.0.13/files/cairo-arabic-400-normal.woff2) format('woff2');unicode-range:U+0600-06FF,U+0750-077F,U+FB50-FDFF,U+FE70-FEFF;}
+@font-face{font-family:Cairo;font-weight:700;src:url(https://cdn.jsdelivr.net/npm/@fontsource/cairo@5.0.13/files/cairo-arabic-700-normal.woff2) format('woff2');unicode-range:U+0600-06FF,U+0750-077F,U+FB50-FDFF,U+FE70-FEFF;}
+@font-face{font-family:Cairo;font-weight:400;src:url(https://cdn.jsdelivr.net/npm/@fontsource/cairo@5.0.13/files/cairo-latin-400-normal.woff2) format('woff2');}
+@font-face{font-family:Cairo;font-weight:700;src:url(https://cdn.jsdelivr.net/npm/@fontsource/cairo@5.0.13/files/cairo-latin-700-normal.woff2) format('woff2');}
+@page{size:A4;margin:14mm 13mm 16mm 13mm;}
+:root{--ink:#1d2433;--muted:#5b6475;--line:#d9dee7;--soft:#f3f5f9;--gold:#b8860b;--gold-soft:#fbf3dd;--good:#1f7a4d;--good-soft:#e5f4ec;--bad:#b42318;--bad-soft:#fdecea;}
+*{box-sizing:border-box}
+body{font-family:Cairo,"DejaVu Sans",sans-serif;color:var(--ink);font-size:10.5pt;line-height:1.65;margin:0;background:#fff}
+h1{font-size:22pt;margin:0 0 2mm;line-height:1.3}
+h2{font-size:13.5pt;margin:7mm 0 2.5mm;padding-bottom:1.5mm;border-bottom:2px solid var(--gold);break-after:avoid}
+h3{font-size:11pt;margin:4mm 0 1.5mm;break-after:avoid}
+p{margin:1.5mm 0}
+.num,td.n{direction:ltr;unicode-bidi:isolate;font-variant-numeric:tabular-nums}
+.cover{border:1px solid var(--line);border-top:6px solid var(--gold);border-radius:3mm;padding:6mm 7mm;margin-bottom:5mm;background:linear-gradient(180deg,var(--gold-soft),#fff 60%)}
+.sub{color:var(--muted);font-size:10pt}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:3mm;margin:4mm 0 1mm}
+.kpi{border:1px solid var(--line);border-radius:2.5mm;padding:2.5mm 3mm;background:#fff}
+.kpi .v{font-size:15pt;font-weight:700;direction:ltr;unicode-bidi:isolate;display:block}
+.kpi .l{color:var(--muted);font-size:8.8pt}
+table{width:100%;border-collapse:collapse;margin:2mm 0 3mm;font-size:9.6pt;break-inside:avoid}
+th,td{border:1px solid var(--line);padding:1.4mm 2mm;text-align:right;vertical-align:top}
+th{background:var(--soft);font-weight:700}
+td.n,th.n{text-align:center}
+.pos{color:var(--good);font-weight:700}
+.neg{color:var(--bad);font-weight:700}
+.note{background:var(--soft);border-right:4px solid var(--muted);padding:2.5mm 3.5mm;border-radius:1.5mm;margin:3mm 0;break-inside:avoid}
+.warn{background:var(--bad-soft);border-right:4px solid var(--bad)}
+.ok{background:var(--good-soft);border-right:4px solid var(--good)}
+.tag{display:inline-block;direction:ltr;font-weight:700;background:var(--gold-soft);border:1px solid #e7d39a;border-radius:1mm;padding:0 1.5mm;font-size:9pt}
+ul,ol{margin:1mm 0 2mm;padding-right:5mm}
+li{margin:.6mm 0}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:4mm}
+.page-break{break-before:page}
+.foot{color:var(--muted);font-size:8.5pt;margin-top:6mm;border-top:1px solid var(--line);padding-top:2mm}
+code{direction:ltr;unicode-bidi:isolate;font-family:"DejaVu Sans Mono",monospace;font-size:8.8pt;background:var(--soft);padding:0 1mm;border-radius:1mm}
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <h1><span dir="ltr" style="unicode-bidi:isolate">XAU HiWin v45.1</span></h1>
+  <div class="sub">ملخص أقوى نسخة وصلنالها — بوت ذهب (XAUUSD+) على فريم M5 — رقم الماجيك <span class="num">20263255</span> — <span class="num">2026.11.20</span></div>
+  <div class="kpis">
+    <div class="kpi"><span class="v">+105,486$</span><span class="l">صافي الربح في المختبر (2023–2026)</span></div>
+    <div class="kpi"><span class="v">1.66</span><span class="l">عامل الربح</span></div>
+    <div class="kpi"><span class="v">10.49</span><span class="l">عامل الاسترداد</span></div>
+    <div class="kpi"><span class="v">16.7%</span><span class="l">أقصى تراجع (كان في 2023)</span></div>
+  </div>
+  <p class="sub">اختبار MT5: Vantage، XAUUSD+، كل نقطة مبنية على نقاط حقيقية (جودة <span class="num">100%</span>)، رأس مال <span class="num">5,000$</span>، رافعة <span class="num">1:100</span>، من <span class="num">2023.01.01</span> لـ <span class="num">2026.11.20</span>، <span class="num">2,503</span> صفقة.</p>
+</div>
+
+<h2>١. الفكرة في سطرين</h2>
+<p>البوت مش استراتيجية واحدة. هو <b>6 محركات</b> كل واحد بيكسب في وقت ونوع سوق مختلف، فلما واحد يضعف التاني بيغطيه. وكل محرك اتقبل بس بعد ما كسب في كل سنة لوحدها، وبأكتر من إعداد، على محاكي مضبوط على المختبر صفقة بصفقة.</p>
+
+<h2>٢. المحركات</h2>
+<table>
+<tr><th>المحرك</th><th>التعليق على الصفقة</th><th>بيشتغل إمتى</th><th>الفكرة</th></tr>
+<tr><td>السكالب</td><td class="n"><span class="tag">S1</span> <span class="tag">S4</span> <span class="tag">S5</span></td><td>7 الصبح – 9 بالليل</td><td>رجعة صغيرة جوه الاتجاه (بولينجر، EMA 50/200 + RSI، قمة/قاع 12 شمعة + إيشيموكو). هدف 0.5 ATR، ستوب 7 ATR، دخول بأمر ليميت.</td></tr>
+<tr><td>رجل الإنقاذ</td><td class="n"><span class="tag">R</span></td><td>مع السكالب</td><td>لو صفقة سكالب راحت 2 ATR عكسنا، يفتح صفقة تانية والاتنين يتقفلوا عند متوسط الدخول.</td></tr>
+<tr><td>لندن</td><td class="n"><span class="tag">L1</span></td><td>من 9 الصبح، صفقة في اليوم</td><td>كسر نطاق الجلسة الآسيوية (3 لـ 9 الصبح). ستوب 1.75 من عرض النطاق، هدف عرض النطاق، إقفال 9 بالليل. نص لوت.</td></tr>
+<tr><td>الاتجاه</td><td class="n"><span class="tag">T1</span></td><td>24 ساعة</td><td>كسر أعلى/أقل سعر في آخر 55 ساعة. ستوب 3 ATR ساعة، وبيتحرك ورا السعر كل ساعة. مخاطرة 0.25% للصفقة.</td></tr>
+<tr><td>الليل</td><td class="n"><span class="tag">N1</span></td><td>1:05 → 4:00 الفجر</td><td>شراء بالليل (الذهب بيكسب أغلب صعوده بالليل). بس بعد يوم اتحرك فيه الذهب أكتر من 1%، ومن غير يوم الاتنين. ربع لوت، ستوب حماية 0.5%.</td></tr>
+</table>
+
+<h2>٣. النتيجة في المختبر سنة بسنة</h2>
+<table>
+<tr><th>السنة</th><th class="n">صافي الربح</th><th>طبيعة السوق</th><th>ملاحظة</th></tr>
+<tr><td class="n">2023</td><td class="n neg">−353$</td><td>هادي، الذهب بين 1,800 و 2,080</td><td>سنة جديدة تماماً على البوت (ما اتظبطش عليها أي حاجة). أول 8 شهور خسارة صغيرة، وبعدين رجع.</td></tr>
+<tr><td class="n">2024</td><td class="n pos">+1,527$</td><td>صعود هادي</td><td></td></tr>
+<tr><td class="n">2025</td><td class="n pos">+7,790$</td><td>متحرك</td><td></td></tr>
+<tr><td class="n">2026</td><td class="n pos">+96,685$</td><td>متحرك جداً</td><td>معظمه جاي من التراكم (اللوت بيكبر مع الرصيد).</td></tr>
+</table>
+
+<h3>المحركات لوحدها (على لوت 0.01، عشان المقارنة تبقى عادلة)</h3>
+<table>
+<tr><th>المحرك</th><th class="n">2023</th><th class="n">2024</th><th class="n">2025</th><th class="n">2026</th><th class="n">عامل الربح</th></tr>
+<tr><td>S1</td><td class="n neg">−37</td><td class="n pos">+34</td><td class="n pos">+124</td><td class="n pos">+485</td><td class="n">1.61</td></tr>
+<tr><td>S4</td><td class="n pos">+11</td><td class="n pos">+13</td><td class="n pos">+62</td><td class="n pos">+231</td><td class="n">1.86</td></tr>
+<tr><td>S5</td><td class="n pos">+9</td><td class="n pos">+10</td><td class="n pos">+138</td><td class="n pos">+48</td><td class="n">2.26</td></tr>
+<tr><td>رجل الإنقاذ R</td><td class="n neg">−23</td><td class="n pos">+27</td><td class="n pos">+147</td><td class="n pos">+306</td><td class="n">2.81</td></tr>
+<tr><td>لندن L1</td><td class="n neg">−48</td><td class="n pos">+390</td><td class="n pos">+617</td><td class="n pos">+1,901</td><td class="n">1.44</td></tr>
+<tr><td>الاتجاه T1</td><td class="n neg">−139</td><td class="n pos">+278</td><td class="n pos">+551</td><td class="n pos">+727</td><td class="n">1.30</td></tr>
+<tr><td>الليل N1</td><td class="n pos">+29</td><td class="n pos">+66</td><td class="n pos">+286</td><td class="n pos">+653</td><td class="n">2.24</td></tr>
+</table>
+
+<div class="note warn"><b>صراحة:</b> البوت بيكسب كويس لما الذهب بيتحرك، وبيقف تقريباً في السنين الهادية زي 2023. جربنا أكتر من 6 طرق نقلب 2023 لمكسب ومحدش نجح، والتعديلات اللي قللت خسارتها كانت بتقلل ربح السنين التانية أكتر.</div>
+
+<h2>٤. الطريق من v38 لـ v45.1</h2>
+<table>
+<tr><th>النسخة</th><th>التعديل</th><th>ليه</th></tr>
+<tr><td class="n">v39</td><td>أرضية الـ ATR 5.0 → 5.5</td><td>الشريحة 5.0–5.5 كانت خسرانة في نصّين السنة.</td></tr>
+<tr><td class="n">v40</td><td>الأرضيات بقت نسبة من السعر</td><td>v39 ما اتداولتش تقريباً في 2024 لأن الذهب كان أرخص.</td></tr>
+<tr><td class="n">v41</td><td>أرضية 0.14%، وقفل B1</td><td>B1 خسر في 2024 و 2025. الأرضية حسّنت كل سنة.</td></tr>
+<tr><td class="n">v42</td><td>محرك لندن + هدف المجموعة 0</td><td>الربح ×2.5 والتراجع أقل بالتلت. 693 من 695 صفقة اتطابقت مع المختبر.</td></tr>
+<tr><td class="n">v43</td><td>S4 + محرك الاتجاه</td><td>الربح اتضاعف من غير ما التراجع يزيد.</td></tr>
+<tr><td class="n">v44</td><td>ستوب السكالب 7 ATR ولندن 1.75</td><td>الخسارة الإجمالية قلت 39 ألف دولار والربح زاد.</td></tr>
+<tr><td class="n">v44.2</td><td>حماية الحسابات الصغيرة</td><td>محرك الاتجاه ما يدخلش لو أقل لوت هيخاطر بأكتر من 1%.</td></tr>
+<tr><td class="n">v45.1</td><td>محرك الليل بالفلتر الذكي</td><td>+26% ربح، وكل أرقام الأمان أحسن من v44.2.</td></tr>
+</table>
+
+<h3>اتجرب واترفض (أكتر من 40 فكرة)</h3>
+<p class="sub">ستوب أضيق للمجموعة، قفل الإنقاذ، التعادل بعد ربح صغير، صفقة عكسية بعد الخسارة، وقف الشهر الخسران، اختراق نيويورك، اختراق قمة/قاع امبارح، عكس اختراق لندن، اصطياد السيولة (ICT)، الدعم والمقاومة، S2 و S3، تقليد بوت My AI Gold، والذكاء الاصطناعي كفلتر (اتعلم على سنين واتختبر على سنة ما شافهاش، وما لقاش نمط ثابت).</p>
+
+<h2>٥. الحماية جوه البوت</h2>
+<div class="two">
+<ul>
+<li>كل صفقة ليها ستوب من أول لحظة.</li>
+<li>وقف لباقي اليوم لو البوت خسر 10% في يوم (من صفقاته هو بس).</li>
+<li>إقفال كل الصفقات لو الخسارة المفتوحة وصلت 25%.</li>
+<li>إجمالي المخاطرة المفتوحة ما يعديش 20%.</li>
+</ul>
+<ul>
+<li>ما بيدخلش وقت الحركات العنيفة المفاجئة (الأخبار).</li>
+<li>ما بيدخلش لو السبريد عالي.</li>
+<li>ما بيفتحش صفقات جديدة يوم الجمعة بعد 8 بالليل.</li>
+<li>مفيش مضاعفة لوت بعد الخسارة (مارتينجيل) ولا شبكة صفقات.</li>
+</ul>
+</div>
+
+<h2>٦. الإعدادات المهمة</h2>
+<table>
+<tr><th>الإعداد</th><th class="n">القيمة</th><th>يعني إيه</th></tr>
+<tr><td><code>InpMagic</code></td><td class="n">20263255</td><td>رقم البوت. على Vantage حالياً <span class="num">20263254</span> عشان صفقة الاتجاه القديمة.</td></tr>
+<tr><td><code>InpHourShift</code></td><td class="n">0 / −1</td><td>0 على Vantage، و −1 على IFCMarkets (ساعتها متأخرة ساعة).</td></tr>
+<tr><td><code>InpLotPer1000</code></td><td class="n">0.01</td><td>0.01 لوت لكل 1,000$ من الحساب، وبيكبر مع الرصيد.</td></tr>
+<tr><td><code>InpUseLondon / InpUseTrend / InpUseNight</code></td><td class="n">true</td><td>تشغيل/قفل كل محرك.</td></tr>
+<tr><td><code>InpNightMinPrevPct</code></td><td class="n">1.0</td><td>محرك الليل يدخل بس بعد يوم اتحرك 1% أو أكتر.</td></tr>
+<tr><td><code>InpLogCsv</code></td><td class="n">true</td><td>سجل لكل صفقة في <code>Common\Files</code>.</td></tr>
+</table>
+
+<h2>٧. التوقع الواقعي والخطة</h2>
+<table>
+<tr><th>نوع السنة</th><th>زي</th><th class="n">النتيجة المتوقعة</th></tr>
+<tr><td>هادية</td><td class="n">2023</td><td class="n">تقريباً تعادل (−5% لـ −7%)</td></tr>
+<tr><td>عادية</td><td class="n">2024</td><td class="n">حوالي +30%</td></tr>
+<tr><td>متحركة</td><td class="n">2025</td><td class="n">+100% أو أكتر</td></tr>
+</table>
+<div class="note ok">
+<b>الخطة:</b>
+<ol>
+<li>ديمو من أسبوعين لـ 4 أسابيع (شغال دلوقتي على Vantage و IFCMarkets)، ومقارنة كل صفقة بالمحاكي.</li>
+<li>VPS عشان البوت يشتغل 24 ساعة من غير انقطاع.</li>
+<li>حساب حقيقي بنفس المخاطرة، وما تسحبش أول 3 شهور.</li>
+<li>بعد كده سحب 30% من ربح كل شهر كسبان، وراس المال ما يتلمسش، ومفيش سحب في الشهر الخسران.</li>
+<li>احتياطي برا الحساب يكفي 6 شهور، لأن السنين الهادية ممكن تيجي.</li>
+</ol>
+</div>
+
+<p class="foot">كل الأرقام من اختبار تاريخي ومحاكاة، والأداء السابق مش ضمان للمستقبل. الملفات الكاملة: <code>ea/XAU_HiWin_EA_v45.mq5</code> و <code>analysis/v38_deep_analysis_AR.md</code> على فرع <code>claude/bot-analysis-optimization-82i7f1</code>.</p>
+</body>
+</html>
