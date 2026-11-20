@@ -80,3 +80,20 @@ def ichimoku_spans(h, l, t=9, k=26, s=52):
     a = (tenkan + kijun) / 2
     b = (rolling_max(h, s) + rolling_min(l, s)) / 2
     return a, b
+
+
+def rsi(c, n=14):
+    """MT5 RSI.mq5: Wilder smoothing, first value = simple average."""
+    d = np.diff(c, prepend=c[0])
+    up = np.maximum(d, 0.0)
+    dn = np.maximum(-d, 0.0)
+    out = np.full(len(c), 50.0)
+    if len(c) <= n:
+        return out
+    au = up[1:n + 1].mean()
+    ad = dn[1:n + 1].mean()
+    for i in range(n + 1, len(c)):
+        au = (au * (n - 1) + up[i]) / n
+        ad = (ad * (n - 1) + dn[i]) / n
+        out[i] = 100.0 if ad == 0 else 100.0 - 100.0 / (1.0 + au / ad)
+    return out

@@ -21,7 +21,7 @@ DEFAULTS = dict(
     tp_atr=0.5, sl_atr=5.0, time_stop_bars=48, max_spread_atr=0.10,
     start_hour=7, end_hour=21, limit_atr=0.3, limit_wait_bars=3,
     holidays=('2026.12.24', '2026.12.25', '2026.12.26', '2026.12.31', '2027.01.01'),
-    use_s1=True, use_s5=True, ichi_shift=26, bb_period=20, bb_dev=2.0, extreme_bars=12,
+    use_s1=True, use_s5=True, use_s2=False, use_s3=False, use_s4=False, s2_rsi=35.0, s3_rsi=45.0, ichi_shift=26, bb_period=20, bb_dev=2.0, extreme_bars=12,
     use_b1=True, b_lookback=20, b_spike_min=1.8, b_atr_min=5.0, b_sl_atr=1.5, b_tp_atr=6.0,
     b_trail_start=1.5, b_trail_atr=1.5, b_max_pos=2, b_lot_mult=1.0, b_cooldown=12,
     adx_min=12.0, range_bars=12, range_min_atr=2.0,
@@ -33,7 +33,8 @@ DEFAULTS = dict(
     recover_spike_guard=True, recover_hours_only=True,
     commission_per_lot_side=3.0, leverage=100.0, contract=100.0,
     use_ldn=False, ldn_start=3, ldn_end=9, ldn_close=21, ldn_tp=1.0, ldn_lot_mult=0.5, ldn_against_mult=1.0, ldn_risk_pct=0.0, ldn_be_at=0.0, ldn_be_lock=0.05, ldn_sar=False,
-    dd_throttle_pct=0.0, dd_throttle_mult=0.5, month_stop_pct=0.0, withdraw_pct=0.0, ldn_skip_from=99, ldn_skip_to=99,
+    dd_throttle_pct=0.0, dd_throttle_mult=0.5, month_stop_pct=0.0, withdraw_pct=0.0,
+    use_trend=False, tr_n=55, tr_sl_atr=3.0, tr_trail_atr=4.0, tr_risk_pct=0.5, ldn_skip_from=99, ldn_skip_to=99,
     deposit=5000.0,
 )
 
@@ -119,7 +120,14 @@ class Sim:
             self.atr_avg50[i] = (cs[i - 1] - cs[i - 51]) / 50.0
         self.m5_of_m1 = np.searchsorted(b5['t'], m1['t'], side='right') - 1
         h1 = resample(m1, 60)
+        self.h1 = h1
         self.h1t = h1['t']
+        self.h1e20 = ind.ema(h1['c'], 20)
+        self.h1atr = ind.atr(h1['h'], h1['l'], h1['c'], 14)
+        self.h1hh = ind.rolling_max(h1['h'], P['tr_n'])
+        self.h1ll = ind.rolling_min(h1['l'], P['tr_n'])
+        self.rsi5 = ind.rsi(c, 14)
+        self.m15e200 = ind.ema(b15['c'], 200)
         self.h1e50 = ind.ema(h1['c'], 50)
         self.h1e200 = ind.ema(h1['c'], 200)
 
@@ -134,6 +142,20 @@ class Sim:
         if f1 < s1 and s1 < s4 and c < s1:
             return -1
         return 0
+
+    def trend_m15_slow(self, k):
+        j = self.m15_of_m5[k] - 1
+        if j < 5:
+            return 0
+        f1, s1, s4, c = self.e50[j], self.m15e200[j], self.m15e200[j - 3], self.b15['c'][j]
+        return 1 if (f1 > s1 and s1 > s4 and c > s1) else -1 if (f1 < s1 and s1 < s4 and c < s1) else 0
+
+    def trend_h1(self, t):
+        j = np.searchsorted(self.h1t, t, side='right') - 2
+        if j < 5:
+            return 0
+        f1, s1, s4, c = self.h1e20[j], self.h1e50[j], self.h1e50[j - 3], self.h1['c'][j]
+        return 1 if (f1 > s1 and s1 > s4 and c > s1) else -1 if (f1 < s1 and s1 < s4 and c < s1) else 0
 
     # ------------------------------------------------------------------ helpers
     def equity(self, bid, ask):
@@ -327,7 +349,7 @@ class Sim:
                     self.locked = True
             # ---- time stop (not B1)
             for x in list(self.pos):
-                if x.tag not in ('B1', 'L1') and t - x.t_open >= P['time_stop_bars'] * 300:
+                if x.tag not in ('B1', 'L1', 'T1') and t - x.t_open >= P['time_stop_bars'] * 300:
                     self.close_pos(x, bid if x.buy else ask, t, 'time')
             # ---- engine L closes at its hour
             if P['use_ldn']:
@@ -382,7 +404,7 @@ class Sim:
         if P['recover_spike_guard'] and self.k_loaded > 0 and self.spike_now(self.k_loaded):
             return
         for x in list(self.pos):
-            if x.tag in ('R', 'B1', 'L1'):
+            if x.tag in ('R', 'B1', 'L1', 'T1'):
                 continue
             if any(y.tag == 'R' and y.parent == x.id for y in self.pos):
                 continue
@@ -425,6 +447,8 @@ class Sim:
         a = self.atr[k - 1]
         if not a > 0:
             return
+        if P['use_trend'] and int(self.b5['t'][k]) % 3600 == 0:
+            self.check_trend(bid, ask, t)
         sig_t = int(self.b5['t'][k - 1])
         sh = dt.datetime.utcfromtimestamp(sig_t).hour
         if sh < P['start_hour'] or sh > P['end_hour']:
@@ -463,7 +487,7 @@ class Sim:
         # ---- engine L
         if P['use_ldn']:
             self.check_london(bid, ask, t, k)
-        orig = sum(1 for x in self.pos if x.tag not in ('R', 'B1', 'L1'))
+        orig = sum(1 for x in self.pos if x.tag not in ('R', 'B1', 'L1', 'T1'))
         if orig + len(self.pend) >= P['max_positions']:
             return
         tr = self.trend(k)
@@ -485,9 +509,27 @@ class Sim:
                 d, tag = 1, 'S5'
             elif tr == -1 and c1 >= hi and c1 < bot:
                 d, tag = -1, 'S5'
+        r1 = self.rsi5[k - 1]
+        if d == 0 and P['use_s3'] and tr != 0 and nospike:
+            if tr == 1 and r1 < P['s3_rsi']:
+                d, tag = 1, 'S3'
+            elif tr == -1 and r1 > 100 - P['s3_rsi']:
+                d, tag = -1, 'S3'
+        if d == 0 and P['use_s2'] and nospike:
+            th = self.trend_h1(t)
+            if th == 1 and r1 < P['s2_rsi']:
+                d, tag = 1, 'S2'
+            elif th == -1 and r1 > 100 - P['s2_rsi']:
+                d, tag = -1, 'S2'
+        if d == 0 and P['use_s4'] and not (P['adx_min'] > 0 and self.adx[k - 1] < P['adx_min']):
+            ts = self.trend_m15_slow(k)
+            if ts == 1 and r1 < P['s2_rsi']:
+                d, tag = 1, 'S4'
+            elif ts == -1 and r1 > 100 - P['s2_rsi']:
+                d, tag = -1, 'S4'
         if d == 0:
             return
-        if tag != 'S1' and P['adx_min'] > 0 and self.adx[k - 1] < P['adx_min']:
+        if tag not in ('S1', 'S4') and P['adx_min'] > 0 and self.adx[k - 1] < P['adx_min']:
             return
         if not nospike:
             return
@@ -504,6 +546,31 @@ class Sim:
             if rng < P['range_min_atr']:
                 return
         self.open_trade(d, tag, bid, ask, t, a)
+
+    def check_trend(self, bid, ask, t):
+        P = self.p
+        j = np.searchsorted(self.h1t, t, side='right') - 2      # the H1 candle that just closed
+        if j < P['tr_n'] + 2 or not self.h1atr[j] > 0:
+            return
+        a = self.h1atr[j]
+        for x in self.pos:                                       # trail on each closed hour
+            if x.tag != 'T1':
+                continue
+            best = x.op + x.mfe if x.buy else x.op - x.mfe
+            ns = round(best - P['tr_trail_atr'] * a if x.buy else best + P['tr_trail_atr'] * a, 2)
+            if (x.buy and ns > x.sl) or (not x.buy and ns < x.sl):
+                x.sl = ns
+        if any(x.tag == 'T1' for x in self.pos) or self.locked:
+            return
+        c = self.h1['c'][j]
+        d = 1 if c > self.h1hh[j - 1] else -1 if c < self.h1ll[j - 1] else 0
+        if d == 0:
+            return
+        entry = ask if d == 1 else bid
+        sld = P['tr_sl_atr'] * a
+        lot = self.equity(bid, ask) * P['tr_risk_pct'] / 100.0 / (sld * P['contract'])
+        lot = max(0.01, min(math.floor(lot / 0.01 + 1e-9) * 0.01, P['max_lot']))
+        self.open_pos('T1', d == 1, lot, entry, round(entry - d * sld, 2), 0.0, t, a)
 
     def check_london(self, bid, ask, t, k):
         P = self.p
