@@ -34,7 +34,7 @@ DEFAULTS = dict(
     commission_per_lot_side=3.0, leverage=100.0, contract=100.0,
     use_ldn=False, ldn_start=3, ldn_end=9, ldn_close=21, ldn_tp=1.0, ldn_lot_mult=0.5, ldn_against_mult=1.0, ldn_risk_pct=0.0, ldn_be_at=0.0, ldn_sl_mult=1.0, ldn_last_entry=19, ldn_min_rng_atr=0.0, ldn_max_rng_atr=99.0, ldn_be_lock=0.05, ldn_sar=False,
     dd_throttle_pct=0.0, dd_throttle_mult=0.5, month_stop_pct=0.0, withdraw_pct=0.0,
-    use_trend=False, tr_n=55, tr_sl_atr=3.0, tr_trail_atr=4.0, tr_risk_pct=0.5, ldn_skip_from=99, ldn_skip_to=99,
+    use_trend=False, tr_n=55, tr_sl_atr=3.0, tr_trail_atr=4.0, tr_risk_pct=0.5, tr_max_minlot_risk=0.0, ldn_skip_from=99, ldn_skip_to=99,
     deposit=5000.0,
 )
 
@@ -569,6 +569,9 @@ class Sim:
         entry = ask if d == 1 else bid
         sld = P['tr_sl_atr'] * a
         lot = self.equity(bid, ask) * P['tr_risk_pct'] / 100.0 / (sld * P['contract'])
+        if lot < 0.01 and P['tr_max_minlot_risk'] > 0 and \
+                sld * P['contract'] * 0.01 > self.equity(bid, ask) * P['tr_max_minlot_risk'] / 100.0:
+            return                                   # the smallest lot would risk too much
         lot = max(0.01, min(math.floor(lot / 0.01 + 1e-9) * 0.01, P['max_lot']))
         self.open_pos('T1', d == 1, lot, entry, round(entry - d * sld, 2), 0.0, t, a)
 

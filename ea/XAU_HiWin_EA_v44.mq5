@@ -252,7 +252,7 @@
 //|  Test on DEMO first. Needs M5 (the EA reads M5/M15 itself).      |
 //+------------------------------------------------------------------+
 #property copyright "XAU HiWin"
-#property version   "44.10"
+#property version   "44.20"
 #property description "XAU HiWin v44: v43 with wider scalper and London stops. magic 20263254."
 
 #include <Trade\Trade.mqh>
@@ -390,6 +390,7 @@ input int    InpTrendN          = 55;         // break of the highest high / low
 input double InpTrendSLatr      = 3.0;        // first stop, in H1 ATR(14)
 input double InpTrendTrailATR   = 4.0;        // trailing distance behind the best price, in H1 ATR, moved once per hour
 input double InpTrendRiskPct    = 0.25;       // % of equity lost if the first stop is hit
+input double InpTrendMaxMinLot  = 1.0;        // v44.2: skip the trade if even the smallest lot would lose more than this % of equity
 
 input string InpBlockHours      = "";         // server hours with no new entries (empty = none; the 12,15,16,20 idea was noise in the larger simulation)
 
@@ -1395,7 +1396,12 @@ void CheckTrend()
    double lpl = LossPerLot(dir, entry, slDist);
    if(lpl <= 0) return;
    double step = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP); if(step <= 0) step = 0.01;
-   double lot = AccountInfoDouble(ACCOUNT_EQUITY) * InpTrendRiskPct / 100.0 / lpl;
+   double eqT = AccountInfoDouble(ACCOUNT_EQUITY);
+   double lot = eqT * InpTrendRiskPct / 100.0 / lpl;
+   double vmin = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
+   //--- v44.2: on a small account the minimum lot can mean many times the intended risk
+   if(lot < vmin && InpTrendMaxMinLot > 0 && lpl * vmin > eqT * InpTrendMaxMinLot / 100.0)
+   { gStatus = "T1 skipped: min lot would risk too much"; return; }
    lot = MathFloor(lot / step + 1e-9) * step;
    lot = MathMax(lot, SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN));
    lot = MathMin(lot, MathMin(SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MAX), InpMaxLot));
