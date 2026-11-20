@@ -21,7 +21,11 @@
 //|     max DD         10.3%       9.8%
 //|     losing months   7/35       5/35
 //|     worst month    -3.5%      -6.2%   (October 2026)
-//|  Switch it off with InpUseNight = false.
+//|  v45.1: the night trade is taken only after a day that moved at
+//|  least 1% (up or down). Every threshold 0.5-1.5% beat "every night"
+//|  in every year (fixed lot: DD 170 -> 100, PF 1.36 -> 2.28).
+//|  $5,000 account: final 129,222, max DD 9.6%, worst month -3.3%.
+//|  Switch the engine off with InpUseNight = false.
 //+------------------------------------------------------------------+
 //+------------------------------------------------------------------+
 //|  XAU HiWin  v44                                      magic 20263254
@@ -277,7 +281,7 @@
 //|  Test on DEMO first. Needs M5 (the EA reads M5/M15 itself).      |
 //+------------------------------------------------------------------+
 #property copyright "XAU HiWin"
-#property version   "45.00"
+#property version   "45.10"
 #property description "XAU HiWin v45: v44.2 + night drift engine. magic 20263255."
 
 #include <Trade\Trade.mqh>
@@ -427,6 +431,8 @@ input double InpNightLotMult    = 0.25;       // lot = normal sizing rule x this
 input double InpNightSLpct      = 0.5;        // catastrophe stop, % of price
 input double InpNightMaxMinLot  = 2.0;        // skip if even the smallest lot would lose more than this % of equity at the stop
 input double InpNightMaxSpreadPct = 0.02;     // skip if the spread is wider than this % of price
+input double InpNightMinPrevPct = 1.0;        // v45.1: trade only after a day that moved at least this % (up OR down). 0 = every night
+input double InpNightQuietMult  = 0.0;        // v45.1: lot multiplier after a quieter day (0 = no trade)
 
 input string InpBlockHours      = "";         // server hours with no new entries (empty = none; the 12,15,16,20 idea was noise in the larger simulation)
 
@@ -1492,7 +1498,22 @@ void ManageNight()
    double eq   = AccountInfoDouble(ACCOUNT_EQUITY);
    double step = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP); if(step <= 0) step = 0.01;
    double vmin = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
-   double lot  = CalcLot(1, ask, slDist) * MathMax(0.0, InpNightLotMult);
+   //--- v45.1 the night filter: the drift is strong after a big day (either way), weak after a quiet one.
+   //--- Yesterday's move |close/open - 1|, 2024 / 2025 / 2026 profit factor of the night trade:
+   //---    moved more than 1%: 3.06 down, 2.15 up / 3.65, 2.20 / 3.29, 2.74
+   //---    moved less than 1%: 0.92 - 1.35, and 0.38 in 2026
+   double mult = MathMax(0.0, InpNightLotMult);
+   if(InpNightMinPrevPct > 0)
+   {
+      double o1 = iOpen(_Symbol, PERIOD_D1, 1), c1 = iClose(_Symbol, PERIOD_D1, 1);
+      double prev = (o1 > 0) ? MathAbs(c1 / o1 - 1.0) * 100.0 : 0.0;
+      if(prev < InpNightMinPrevPct)
+      {
+         if(InpNightQuietMult <= 0) { gStatus = "N1 skipped: quiet day before (" + DoubleToString(prev, 2) + "%)"; return; }
+         mult *= InpNightQuietMult;
+      }
+   }
+   double lot  = CalcLot(1, ask, slDist) * mult;
    lot = MathFloor(lot / step + 1e-9) * step;
    if(lot < vmin)
    {
