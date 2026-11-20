@@ -32,7 +32,7 @@ DEFAULTS = dict(
     max_open_risk_pct=20.0, daily_loss_pct=10.0, emergency_float_pct=25.0,
     recover_spike_guard=True, recover_hours_only=True,
     commission_per_lot_side=3.0, leverage=100.0, contract=100.0,
-    use_ldn=False, ldn_start=3, ldn_end=9, ldn_close=21, ldn_tp=1.0, ldn_lot_mult=0.5, ldn_against_mult=1.0, ldn_risk_pct=0.0, ldn_be_at=0.0, ldn_be_lock=0.05, ldn_sar=False,
+    use_ldn=False, ldn_start=3, ldn_end=9, ldn_close=21, ldn_tp=1.0, ldn_lot_mult=0.5, ldn_against_mult=1.0, ldn_risk_pct=0.0, ldn_be_at=0.0, ldn_sl_mult=1.0, ldn_last_entry=19, ldn_min_rng_atr=0.0, ldn_max_rng_atr=99.0, ldn_be_lock=0.05, ldn_sar=False,
     dd_throttle_pct=0.0, dd_throttle_mult=0.5, month_stop_pct=0.0, withdraw_pct=0.0,
     use_trend=False, tr_n=55, tr_sl_atr=3.0, tr_trail_atr=4.0, tr_risk_pct=0.5, ldn_skip_from=99, ldn_skip_to=99,
     deposit=5000.0,
@@ -586,7 +586,7 @@ class Sim:
                 return
             second = True
         h = (b1 % 86400) // 3600
-        if h < P['ldn_end'] or h >= P['ldn_close'] - 2:
+        if h < P['ldn_end'] or h >= min(P['ldn_close'] - 2, P['ldn_last_entry']):
             return
         if P['ldn_skip_from'] <= h < P['ldn_skip_to']:
             return
@@ -612,6 +612,9 @@ class Sim:
             return
         entry = ask if d == 1 else bid
         rng = max(hi - lo, 0.5)
+        a5 = self.atr[k - 1]
+        if a5 > 0 and not (P['ldn_min_rng_atr'] <= rng / a5 < P['ldn_max_rng_atr']):
+            return
         if P['ldn_risk_pct'] > 0:      # fixed % of equity lost if the stop is hit
             lot = self.equity(bid, ask) * P['ldn_risk_pct'] / 100.0 / (rng * P['contract'])
             lot = min(lot, P['max_lot'])
@@ -623,7 +626,7 @@ class Sim:
             if lot < 0.01 - 1e-9 and P['ldn_against_mult'] == 0:
                 return
         lot = max(0.01, math.floor(lot / 0.01 + 1e-9) * 0.01)
-        self.open_pos('L1', d == 1, lot, entry, round(entry - d * rng, 2), round(entry + d * P['ldn_tp'] * rng, 2), t, rng)
+        self.open_pos('L1', d == 1, lot, entry, round(entry - d * P['ldn_sl_mult'] * rng, 2), round(entry + d * P['ldn_tp'] * rng, 2), t, rng)
 
     def open_trade(self, d, tag, bid, ask, t, a):
         P = self.p
