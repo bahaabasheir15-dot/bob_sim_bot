@@ -21,7 +21,7 @@ def _init(path):
     _M1 = {k: z[k] for k in z.files}
 
 
-def year_stats(tr, years=('2024', '2025', '2026')):
+def year_stats(tr, years=('2023', '2024', '2025', '2026')):
     f = lambda t: dt.datetime.utcfromtimestamp(t).strftime('%Y.%m')
     out = {}
     for y in list(years) + ['ALL']:
@@ -50,11 +50,11 @@ def main(data, base, variants):
     jobs = [(n, dict(base, fixed_lot=0.01, **v)) for n, v in variants]
     with mp.Pool(4, initializer=_init, initargs=(data,)) as pool:
         res = pool.map(_run, jobs)
-    print(f"{'variant':30s} {'2024 net/DD':>12s} {'2025 net/DD':>12s} {'2026 net/DD':>12s} | {'ALL net':>7s} {'DD':>5s} {'RF':>5s} {'PF':>5s} {'n':>5s} lossM")
+    print(f"{'variant':26s} {'2023':>11s} {'2024':>11s} {'2025':>11s} {'2026':>11s} | {'ALL net':>7s} {'DD':>5s} {'RF':>5s} {'PF':>5s} {'n':>5s} lossM")
     for name, r in res:
-        cells = ' '.join(f"{r[y]['net']:6.0f}/{r[y]['dd']:<5.0f}" for y in ('2024', '2025', '2026'))
+        cells = ' '.join(f"{r[y]['net']:6.0f}/{r[y]['dd']:<4.0f}" for y in ('2023', '2024', '2025', '2026'))
         a = r['ALL']
-        print(f"{name:30s} {cells} | {a['net']:7.0f} {a['dd']:5.0f} {a['net'] / max(a['dd'], 1):5.2f} {a['pf']:5.2f} {a['n']:5d} {a['losem']:3d}")
+        print(f"{name:26s} {cells} | {a['net']:7.0f} {a['dd']:5.0f} {a['net'] / max(a['dd'], 1):5.2f} {a['pf']:5.2f} {a['n']:5d} {a['losem']:3d}")
 
 
 if __name__ == '__main__':
