@@ -300,9 +300,9 @@ class Sim:
                 if x.tag not in ('B1', 'L1') and t - x.t_open >= P['time_stop_bars'] * 300:
                     self.close_pos(x, bid if x.buy else ask, t, 'time')
             # ---- engine L closes at its hour
-            if P['use_ldn'] and (t % 86400) // 3600 >= P['ldn_close']:
+            if P['use_ldn']:
                 for x in list(self.pos):
-                    if x.tag == 'L1':
+                    if x.tag == 'L1' and ((t % 86400) // 3600 >= P['ldn_close'] or x.t_open // 86400 < t // 86400):
                         self.close_pos(x, bid if x.buy else ask, t, 'ldn_close')
             # ---- B1 trailing (atr from the last loaded bar)
             if P['use_b1'] and self.k_loaded > 0:

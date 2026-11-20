@@ -202,7 +202,7 @@
 //|  Test on DEMO first. Needs M5 (the EA reads M5/M15 itself).      |
 //+------------------------------------------------------------------+
 #property copyright "XAU HiWin"
-#property version   "42.00"
+#property version   "42.10"
 #property description "XAU HiWin v42: scalper + London breakout engine, recovery target 0. magic 20263252."
 
 #include <Trade\Trade.mqh>
@@ -1217,7 +1217,7 @@ void ManageLondon()
 {
    if(!InpUseLondon) return;
    MqlDateTime now; TimeToStruct(TimeCurrent(), now);
-   if(now.hour < InpLdnCloseHour) return;
+   long today = (long)TimeCurrent() / 86400;
    for(int i = PositionsTotal() - 1; i >= 0; i--)
    {
       ulong tk = PositionGetTicket(i);
@@ -1225,7 +1225,10 @@ void ManageLondon()
       if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
       if(PositionGetInteger(POSITION_MAGIC) != InpMagic) continue;
       if(StringSubstr(PositionGetString(POSITION_COMMENT), 0, 1) != "L") continue;
-      trade.PositionClose(tk);
+      //--- v42.1: also close on the first tick of a later day - on holidays the market
+      //--- shuts before InpLdnCloseHour and the trade used to stay open overnight
+      bool oldDay = (long)PositionGetInteger(POSITION_TIME) / 86400 < today;
+      if(now.hour >= InpLdnCloseHour || oldDay) trade.PositionClose(tk);
    }
 }
 //+------------------------------------------------------------------+
