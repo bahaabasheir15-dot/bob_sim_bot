@@ -23,6 +23,8 @@ DEFAULTS = dict(
     holidays=('2026.12.24', '2026.12.25', '2026.12.26', '2026.12.31', '2027.01.01'),
     use_s1=True, use_s5=True, use_s2=False, use_s3=False, use_s4=False, s2_rsi=35.0, s3_rsi=45.0, ichi_shift=26, bb_period=20, bb_dev=2.0, extreme_bars=12,
     use_s7=False, s7_n=6, s7_comp=1.6, s7_body=1.1, use_s8=False, s8_burst=2.0, use_s9=False, s9_k=2.0, s9_mode='conf', s9_vol=1.5, s9_trend=True, s789_free=True,
+    use_s10=False, s10_k=2.0, use_s11=False, s11_n=20, s11_z=2.0, use_s12=False, s12_n=36, s12_rmin=2.0, s12_rmax=5.0, mr_trend=0,
+    use_s6m=False, s6m_bars=4, s6m_vel=2.5, s6_volx=0.0, s6_dayext=False,
     use_s6=False, s6_vel=2.2, s6_bars=3, s6_mid=True, s6_tp_atr=0.0, s6_sl_atr=0.0, s6_free=True, s6_with_trend=0,
     use_b1=True, b_lookback=20, b_spike_min=1.8, b_atr_min=5.0, b_sl_atr=1.5, b_tp_atr=6.0,
     b_trail_start=1.5, b_trail_atr=1.5, b_max_pos=2, b_lot_mult=1.0, b_cooldown=12,
@@ -102,6 +104,23 @@ class Sim:
         b5 = resample(m1, 5)
         self.b5 = b5
         self.v5 = np.add.reduceat(m1['v'].astype(float), b5['first']) if 'v' in m1 else None
+        if self.v5 is not None:     # session VWAP (server day) and its volume-weighted sd, per M5 bar
+            tp_ = (b5['h'] + b5['l'] + b5['c']) / 3.0
+            dkey = b5['t'] // 86400
+            st = np.r_[0, np.flatnonzero(np.diff(dkey)) + 1]
+            v = self.v5
+            cv = np.cumsum(v); cpv = np.cumsum(v * tp_); cp2 = np.cumsum(v * tp_ ** 2)
+            base = np.repeat(st, np.diff(np.r_[st, len(v)]))
+            sub = lambda x: x - np.where(base > 0, x[base - 1], 0.0)
+            V, PV, P2 = sub(cv), sub(cpv), sub(cp2)
+            self.vwap = PV / np.maximum(V, 1e-9)
+            self.vsd = np.sqrt(np.maximum(P2 / np.maximum(V, 1e-9) - self.vwap ** 2, 0.0))
+            self.vbars = np.arange(len(v)) - base
+        c_ = b5['c']; n_ = P['s11_n']
+        self.zm = ind.sma(c_, n_)
+        sd_ = np.full(len(c_), np.nan)
+        sd_[n_ - 1:] = np.lib.stride_tricks.sliding_window_view(c_, n_).std(axis=1)
+        self.zsd = sd_
         h, l, c = b5['h'], b5['l'], b5['c']
         self.atr = ind.atr(h, l, c, 14)
         self.adx = ind.adx(h, l, c, 14)
@@ -115,6 +134,7 @@ class Sim:
         self.b15 = b15
         self.e20 = ind.ema(b15['c'], 20)
         self.e50 = ind.ema(b15['c'], 50)
+        self.atr15 = ind.atr(b15['h'], b15['l'], b15['c'], 14)
         # M5 bar index -> index of the M15 bar that contains its open time
         self.m15_of_m5 = np.searchsorted(b15['t'], b5['t'], side='right') - 1
         # rolling helpers on M5
@@ -587,7 +607,7 @@ class Sim:
                 d, tag = 1, 'S4'
             elif ts == -1 and r1 > 100 - P['s2_rsi']:
                 d, tag = -1, 'S4'
-        if d == 0 and (P['use_s7'] or P['use_s8'] or P['use_s9']):
+        if d == 0 and (P['use_s7'] or P['use_s8'] or P['use_s9'] or P['use_s10'] or P['use_s11'] or P['use_s12']):
             o5 = self.b5['o']
             if P['use_s7']:      # compression -> impulse breakout, with the M15 EMA50
                 n = P['s7_n']
@@ -616,6 +636,30 @@ class Sim:
                     dd_ = 1 if c5[k - 1] > o5[k - 1] else -1
                     if ok and (not P['s9_trend'] or tr == dd_):
                         d, tag = dd_, 'S9'
+            mid1 = (h5[k - 1] + l5[k - 1]) / 2.0
+            if d == 0 and P['use_s10'] and self.v5 is not None and self.vbars[k - 1] >= 24 and self.vsd[k - 1] > 0:
+                up, dn = self.vwap[k - 1] + P['s10_k'] * self.vsd[k - 1], self.vwap[k - 1] - P['s10_k'] * self.vsd[k - 1]
+                if h5[k - 1] >= up and c5[k - 1] < mid1:
+                    d, tag = -1, 'S10'
+                elif l5[k - 1] <= dn and c5[k - 1] > mid1:
+                    d, tag = 1, 'S10'
+            if d == 0 and P['use_s11'] and self.zsd[k - 2] > 0 and self.zsd[k - 1] > 0:
+                z2 = (c5[k - 2] - self.zm[k - 2]) / self.zsd[k - 2]
+                z1 = (c5[k - 1] - self.zm[k - 1]) / self.zsd[k - 1]
+                if z2 >= P['s11_z'] and z1 < P['s11_z']:
+                    d, tag = -1, 'S11'
+                elif z2 <= -P['s11_z'] and z1 > -P['s11_z']:
+                    d, tag = 1, 'S11'
+            if d == 0 and P['use_s12']:
+                n = P['s12_n']
+                RH, RL = h5[k - 1 - n:k - 1].max(), l5[k - 1 - n:k - 1].min()
+                if P['s12_rmin'] * a <= RH - RL <= P['s12_rmax'] * a:
+                    if h5[k - 1] >= RH - 0.1 * a and c5[k - 1] < RH and c5[k - 1] < mid1:
+                        d, tag = -1, 'S12'
+                    elif l5[k - 1] <= RL + 0.1 * a and c5[k - 1] > RL and c5[k - 1] > mid1:
+                        d, tag = 1, 'S12'
+            if d != 0 and tag in ('S10', 'S11', 'S12') and P['mr_trend'] and tr != d * P['mr_trend']:
+                d = 0
             if d != 0 and P['s789_free']:
                 self.open_trade(d, tag, bid, ask, t, a)
                 return
@@ -631,6 +675,25 @@ class Sim:
                 d, tag = 1, 'S6'
             if d != 0 and P['s6_with_trend'] and tr != d:
                 d = 0
+            if d != 0 and P['s6_volx'] > 0 and self.v5 is not None:   # volume climax: last bar's ticks vs 20-bar mean
+                if self.v5[k - 1] < P['s6_volx'] * self.v5[k - 21:k - 1].mean():
+                    d = 0
+            if d != 0 and P['s6_dayext']:          # the run made the day's high (sell) / low (buy)
+                n0 = int((self.b5['t'][k - 1] % 86400) // 300) + 1
+                if d == -1 and h5[k - 1 - nb:k].max() < h5[k - n0:k].max() - 1e-9:
+                    d = 0
+                if d == 1 and l5[k - 1 - nb:k].min() > l5[k - n0:k].min() + 1e-9:
+                    d = 0
+            if d == 0 and P['use_s6m'] and self.b5['t'][k] % 900 == 0:   # same exhaustion read on M15 candles
+                j = self.m15_of_m5[k] - 1
+                c15, a15 = self.b15['c'], self.atr15[j]
+                if j > P['s6m_bars'] + 20 and a15 > 0:
+                    v15 = (c15[j] - c15[j - P['s6m_bars']]) / a15
+                    m15 = (self.b15['h'][j] + self.b15['l'][j]) / 2.0
+                    if v15 >= P['s6m_vel'] and c15[j] < m15:
+                        d, tag = -1, 'S6'
+                    elif v15 <= -P['s6m_vel'] and c15[j] > m15:
+                        d, tag = 1, 'S6'
             if d != 0 and P['s6_free']:
                 self.open_trade(d, tag, bid, ask, t, a)
                 return
