@@ -202,7 +202,7 @@
 //|  Test on DEMO first. Needs M5 (the EA reads M5/M15 itself).      |
 //+------------------------------------------------------------------+
 #property copyright "XAU HiWin"
-#property version   "42.10"
+#property version   "42.20"
 #property description "XAU HiWin v42: scalper + London breakout engine, recovery target 0. magic 20263252."
 
 #include <Trade\Trade.mqh>
@@ -257,6 +257,7 @@ input int    InpSlippage        = 30;         // Slippage tolerance (points)
 input bool   InpPush            = true;       // Push notifications to phone
 input bool   InpPopup           = true;       // Popup alerts
 input int    InpHeartbeatMin    = 60;         // "I am alive" message every N minutes (0=off)
+input int    InpHourShift       = 0;          // v42.2: hours this broker's clock is AHEAD of Vantage (IFCMarkets = -1). All hour settings stay in Vantage time
 
 //=== Strategy (values from the data search) =========================
 input group "Strategy"
@@ -493,6 +494,10 @@ bool HourBlocked(int h)
 
 string GVK(string k) { return "HW29_" + _Symbol + "_" + (string)InpMagic + "_" + k; }
 
+//--- v42.2: broker time -> Vantage server time, so every hour setting means the same
+//--- moment of the trading day on any broker (set InpHourShift once, nothing else)
+datetime VT(datetime t) { return (datetime)((long)t - (long)InpHourShift * 3600); }
+
 //+------------------------------------------------------------------+
 //| v39: the ATR a scalp was opened with. Until v38 it was always     |
 //| recomputed as |open - SL| / InpSLatr, which is only true while    |
@@ -587,6 +592,8 @@ void CsvStart()
       StringReplace(stamp, ".", ""); StringReplace(stamp, ":", ""); StringReplace(stamp, " ", "_");
       gCsvName = "HiWin_v42_trades_" + stamp + ".csv";
    }
+   else   //--- v42.2: one file per account, so two terminals on one PC never share a file
+      gCsvName = "HiWin_v42_trades_" + (string)AccountInfoInteger(ACCOUNT_LOGIN) + ".csv";
    bool fresh = MQLInfoInteger(MQL_TESTER) || !FileIsExist(CsvName(), FILE_COMMON);
    if(!fresh) return;
    int h = FileOpen(CsvName(), FILE_WRITE | FILE_CSV | FILE_ANSI | FILE_COMMON, ',');
@@ -684,7 +691,7 @@ void CloseEverything(string why)
 void UpdateDay()
 {
    MqlDateTime dt;
-   TimeToStruct(TimeCurrent(), dt);
+   TimeToStruct(VT(TimeCurrent()), dt);
    dt.hour = 0; dt.min = 0; dt.sec = 0;
    datetime today = StructToTime(dt);
    if(today != gDay)
@@ -726,7 +733,7 @@ bool SpikeNow()
 bool InTradingWindow()
 {
    MqlDateTime now;
-   TimeToStruct(TimeCurrent(), now);
+   TimeToStruct(VT(TimeCurrent()), now);
    if(InpFridayFilter && now.day_of_week == 5 && now.hour >= InpFridayStopHour) return false;
    if(now.hour < InpStartHour || now.hour > InpEndHour) return false;
    return true;
@@ -736,7 +743,7 @@ bool InTradingWindow()
 bool IsHoliday()
 {
    if(InpHolidayDates == "") return false;
-   MqlDateTime dt; TimeToStruct(TimeCurrent(), dt);
+   MqlDateTime dt; TimeToStruct(VT(TimeCurrent()), dt);
    string today = StringFormat("%04d.%02d.%02d", dt.year, dt.mon, dt.day);
    string parts[];
    int k = StringSplit(InpHolidayDates, ',', parts);
@@ -1158,13 +1165,15 @@ int CountLondon()
 //--- high / low of today's M5 candles whose server hour is in [start, end)
 bool LondonRange(double &hi, double &lo)
 {
-   datetime b1 = iTime(_Symbol, PERIOD_M5, 1);
+   datetime b1 = VT(iTime(_Symbol, PERIOD_M5, 1));
    datetime day0 = (datetime)((long)b1 - (long)b1 % 86400);
    hi = -DBL_MAX; lo = DBL_MAX;
    for(int sh = 1; sh < 400; sh++)
    {
-      datetime t = iTime(_Symbol, PERIOD_M5, sh);
-      if(t == 0 || t < day0) break;
+      datetime t0 = iTime(_Symbol, PERIOD_M5, sh);
+      if(t0 == 0) break;
+      datetime t = VT(t0);
+      if(t < day0) break;
       int h = (int)(((long)t % 86400) / 3600);
       if(h < InpLdnRangeStart || h >= InpLdnRangeEnd) continue;
       hi = MathMax(hi, iHigh(_Symbol, PERIOD_M5, sh));
@@ -1177,7 +1186,7 @@ bool LondonRange(double &hi, double &lo)
 void CheckLondon()
 {
    if(!InpUseLondon || gMode != HW_AUTO) return;
-   datetime b1 = iTime(_Symbol, PERIOD_M5, 1);
+   datetime b1 = VT(iTime(_Symbol, PERIOD_M5, 1));
    datetime day0 = (datetime)((long)b1 - (long)b1 % 86400);
    if(gLdnDay == day0) return;                                  // one trade a day
    int h = (int)(((long)b1 % 86400) / 3600);
@@ -1216,8 +1225,8 @@ void CheckLondon()
 void ManageLondon()
 {
    if(!InpUseLondon) return;
-   MqlDateTime now; TimeToStruct(TimeCurrent(), now);
-   long today = (long)TimeCurrent() / 86400;
+   MqlDateTime now; TimeToStruct(VT(TimeCurrent()), now);
+   long today = (long)VT(TimeCurrent()) / 86400;
    for(int i = PositionsTotal() - 1; i >= 0; i--)
    {
       ulong tk = PositionGetTicket(i);
@@ -1227,7 +1236,7 @@ void ManageLondon()
       if(StringSubstr(PositionGetString(POSITION_COMMENT), 0, 1) != "L") continue;
       //--- v42.1: also close on the first tick of a later day - on holidays the market
       //--- shuts before InpLdnCloseHour and the trade used to stay open overnight
-      bool oldDay = (long)PositionGetInteger(POSITION_TIME) / 86400 < today;
+      bool oldDay = (long)VT((datetime)PositionGetInteger(POSITION_TIME)) / 86400 < today;
       if(now.hour >= InpLdnCloseHour || oldDay) trade.PositionClose(tk);
    }
 }
@@ -1683,13 +1692,13 @@ void OnTick()
 
    //--- hour of the signal candle (the candle that just closed)
    MqlDateTime sig;
-   TimeToStruct(iTime(_Symbol, PERIOD_M5, 1), sig);
+   TimeToStruct(VT(iTime(_Symbol, PERIOD_M5, 1)), sig);
    if(HourBlocked(sig.hour)) return;
    if(sig.hour < InpStartHour || sig.hour > InpEndHour)
    { gStatus = "Outside trading hours"; gBlkHours++; ShowPanel(); return; }
 
    MqlDateTime now;
-   TimeToStruct(TimeCurrent(), now);
+   TimeToStruct(VT(TimeCurrent()), now);
    if(InpFridayFilter && now.day_of_week == 5 && now.hour >= InpFridayStopHour)
    { gStatus = "Friday: no new trades"; ShowPanel(); return; }
 
