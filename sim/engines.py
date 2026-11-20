@@ -291,3 +291,60 @@ def momentum_pullback_h1(m1, rsi_lo=55, rsi_hi=80, dmin=0.5, dmax=3.0, need_pull
                 if done:
                     continue
     return trades
+
+
+def liquidity_sweep(m1, start_h=3, end_h=9, until_h=18, close_h=21, rr=2.0, buf=0.1, name='SWP',
+                    level='asia'):
+    """ICT-style liquidity grab. level='asia': the Asian range high/low; level='pdhl': yesterday's
+    high/low. After end_h, price trades BEYOND the level (stops taken) and then an M5 candle closes
+    back inside -> enter the other way. Stop just beyond the sweep extreme (+buf x range), target
+    rr x the risk, flat at close_h. One trade a day."""
+    b = resample(m1, 5)
+    t = b['t']
+    day = t // 86400
+    h = _hour(t)
+    hi_l, lo_l = {}, {}
+    if level == 'asia':
+        for i in range(len(t)):
+            if start_h <= h[i] < end_h:
+                dd = day[i]
+                hi_l[dd] = max(hi_l.get(dd, -1e9), b['h'][i])
+                lo_l[dd] = min(lo_l.get(dd, 1e9), b['l'][i])
+    else:
+        dh, dl = {}, {}
+        for i in range(len(t)):
+            dh[day[i]] = max(dh.get(day[i], -1e9), b['h'][i])
+            dl[day[i]] = min(dl.get(day[i], 1e9), b['l'][i])
+        ds = sorted(dh)
+        for k in range(1, len(ds)):
+            hi_l[ds[k]] = dh[ds[k - 1]]
+            lo_l[ds[k]] = dl[ds[k - 1]]
+    st = {}       # per day: extreme beyond the level so far
+    done = set()
+    sl_dist = {}
+
+    def sig(bb, i):
+        dd = day[i]
+        if dd in done or dd not in hi_l or not (end_h <= h[i] < until_h):
+            return 0
+        H, L = hi_l[dd], lo_l[dd]
+        rng = max(H - L, 0.5)
+        s = st.setdefault(dd, {'up': None, 'dn': None})
+        if bb['h'][i] > H:
+            s['up'] = max(s['up'] or -1e9, bb['h'][i])
+        if bb['l'][i] < L:
+            s['dn'] = min(s['dn'] or 1e9, bb['l'][i])
+        c = bb['c'][i]
+        if s['up'] is not None and c < H and c > L:
+            done.add(dd)
+            sl_dist[i] = (s['up'] - c) + buf * rng
+            return -1
+        if s['dn'] is not None and c > L and c < H:
+            done.add(dd)
+            sl_dist[i] = (c - s['dn']) + buf * rng
+            return 1
+        return 0
+
+    return run_engine(m1, 5, sig, dict(sl=lambda bb, i: max(sl_dist[i], 0.5),
+                                        tp=lambda bb, i: rr * max(sl_dist[i], 0.5),
+                                        exit_fn=lambda bb, i, d: h[i] >= close_h or day[i] != day[i - 1]), name=name)
