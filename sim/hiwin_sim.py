@@ -34,7 +34,8 @@ DEFAULTS = dict(
     commission_per_lot_side=3.0, leverage=100.0, contract=100.0,
     use_ldn=False, ldn_start=3, ldn_end=9, ldn_close=21, ldn_tp=1.0, ldn_lot_mult=0.5, ldn_against_mult=1.0, ldn_risk_pct=0.0, ldn_be_at=0.0, ldn_sl_mult=1.0, ldn_last_entry=19, ldn_min_rng_atr=0.0, ldn_max_rng_atr=99.0, ldn_be_lock=0.05, ldn_sar=False,
     dd_throttle_pct=0.0, dd_throttle_mult=0.5, month_stop_pct=0.0, withdraw_pct=0.0,
-    use_trend=False, tr_n=55, tr_sl_atr=3.0, tr_trail_atr=4.0, tr_risk_pct=0.5, tr_max_minlot_risk=0.0, ldn_skip_from=99, ldn_skip_to=99,
+    use_trend=False, tr_n=55, tr_sl_atr=3.0, tr_trail_atr=4.0, tr_risk_pct=0.5, tr_max_minlot_risk=0.0,
+    use_night=False, night_entry_min=65, night_exit_min=240, night_skip_monday=True, night_lot_mult=1.0, night_sl_pct=1.0, ldn_skip_from=99, ldn_skip_to=99,
     deposit=5000.0,
 )
 
@@ -254,6 +255,7 @@ class Sim:
         self.locked = False
         self.last_break = -10**12
         self.ldn_day = None
+        self.night_day = None
         self.ldn_stop = None      # (day, dir) of today's stopped London trade
         self.ldn_second = None
         self.peak = self.balance
@@ -338,6 +340,8 @@ class Sim:
         elif P['daily_loss_pct'] > 0 and not self.locked and \
                 self.day_start - self.balance >= self.day_start * P['daily_loss_pct'] / 100.0:
             self.locked = True
+        if P['use_night']:
+            self.manage_night(bid, ask, t)
         if self.pos:
             # ---- emergency
             if P['emergency_float_pct'] > 0:
@@ -349,7 +353,7 @@ class Sim:
                     self.locked = True
             # ---- time stop (not B1)
             for x in list(self.pos):
-                if x.tag not in ('B1', 'L1', 'T1') and t - x.t_open >= P['time_stop_bars'] * 300:
+                if x.tag not in ('B1', 'L1', 'T1', 'N1') and t - x.t_open >= P['time_stop_bars'] * 300:
                     self.close_pos(x, bid if x.buy else ask, t, 'time')
             # ---- engine L closes at its hour
             if P['use_ldn']:
@@ -404,7 +408,7 @@ class Sim:
         if P['recover_spike_guard'] and self.k_loaded > 0 and self.spike_now(self.k_loaded):
             return
         for x in list(self.pos):
-            if x.tag in ('R', 'B1', 'L1', 'T1'):
+            if x.tag in ('R', 'B1', 'L1', 'T1', 'N1'):
                 continue
             if any(y.tag == 'R' and y.parent == x.id for y in self.pos):
                 continue
@@ -487,7 +491,7 @@ class Sim:
         # ---- engine L
         if P['use_ldn']:
             self.check_london(bid, ask, t, k)
-        orig = sum(1 for x in self.pos if x.tag not in ('R', 'B1', 'L1', 'T1'))
+        orig = sum(1 for x in self.pos if x.tag not in ('R', 'B1', 'L1', 'T1', 'N1'))
         if orig + len(self.pend) >= P['max_positions']:
             return
         tr = self.trend(k)
@@ -546,6 +550,26 @@ class Sim:
             if rng < P['range_min_atr']:
                 return
         self.open_trade(d, tag, bid, ask, t, a)
+
+    def manage_night(self, bid, ask, t):
+        """ENGINE N: long gold from night_entry_min to night_exit_min (server minutes of day)."""
+        P = self.p
+        mod = (t % 86400) // 60
+        for x in list(self.pos):
+            if x.tag == 'N1' and (mod >= P['night_exit_min'] or x.t_open // 86400 != t // 86400):
+                self.close_pos(x, bid, t, 'night_exit')
+        day = t // 86400
+        if self.night_day == day or not (P['night_entry_min'] <= mod < P['night_entry_min'] + 10):
+            return
+        self.night_day = day
+        if self.locked or (P['night_skip_monday'] and dt.datetime.utcfromtimestamp(t).weekday() == 0):
+            return
+        if any(x.tag == 'N1' for x in self.pos):
+            return
+        sld = ask * P['night_sl_pct'] / 100.0
+        lot = self.calc_lot(ask, sld, bid, ask) * P['night_lot_mult']
+        lot = max(0.01, math.floor(lot / 0.01 + 1e-9) * 0.01)
+        self.open_pos('N1', True, lot, ask, round(ask - sld, 2), 0.0, t, sld)
 
     def check_trend(self, bid, ask, t):
         P = self.p
