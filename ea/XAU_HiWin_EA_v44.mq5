@@ -252,7 +252,7 @@
 //|  Test on DEMO first. Needs M5 (the EA reads M5/M15 itself).      |
 //+------------------------------------------------------------------+
 #property copyright "XAU HiWin"
-#property version   "44.00"
+#property version   "44.10"
 #property description "XAU HiWin v44: v43 with wider scalper and London stops. magic 20263254."
 
 #include <Trade\Trade.mqh>
@@ -752,6 +752,25 @@ void CloseEverything(string why)
 }
 
 //--- day tracking + daily loss lock (reset cleanly every new day; ignored when the limit is off)
+//--- v44.1: closed P/L of this EA (magic + symbol) since the start of the given Vantage-time day
+bool   gDayPLDirty = true;
+double gDayPL = 0;
+double OwnClosedPL(datetime vtDay)
+{
+   datetime from = (datetime)((long)vtDay + (long)InpHourShift * 3600);   // back to broker time
+   if(!HistorySelect(from, TimeCurrent() + 60)) return 0;
+   double pl = 0;
+   for(int i = HistoryDealsTotal() - 1; i >= 0; i--)
+   {
+      ulong d = HistoryDealGetTicket(i);
+      if(d == 0) continue;
+      if(HistoryDealGetString(d, DEAL_SYMBOL) != _Symbol) continue;
+      if(HistoryDealGetInteger(d, DEAL_MAGIC) != InpMagic) continue;
+      pl += HistoryDealGetDouble(d, DEAL_PROFIT) + HistoryDealGetDouble(d, DEAL_SWAP) + HistoryDealGetDouble(d, DEAL_COMMISSION);
+   }
+   return pl;
+}
+
 void UpdateDay()
 {
    MqlDateTime dt;
@@ -761,6 +780,7 @@ void UpdateDay()
    if(today != gDay)
    {
       gDay = today;
+      gDayPLDirty = true;
       gDayStart = AccountInfoDouble(ACCOUNT_BALANCE);
       gDayLocked = false;
       GlobalVariableSet(GVK("DayStart"), gDayStart);
@@ -775,7 +795,10 @@ void UpdateDay()
       gDayLocked = (InpDailyLossPct > 0) && (GlobalVariableGet(GVK("Locked")) > 0.5);
    }
    if(InpDailyLossPct <= 0) { gDayLocked = false; return; }
-   double dd = gDayStart - AccountInfoDouble(ACCOUNT_BALANCE);
+   //--- v44.1: today's loss of THIS EA only (its own magic), not the whole account's balance,
+   //--- so another EA on the same account can never switch this one off for the day
+   if(gDayPLDirty) { gDayPL = OwnClosedPL(gDay); gDayPLDirty = false; }
+   double dd = -gDayPL;
    if(!gDayLocked && dd >= gDayStart * InpDailyLossPct / 100.0)
    {
       gDayLocked = true;
@@ -1775,6 +1798,7 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,
    if(HistoryDealGetInteger(deal, DEAL_MAGIC) != InpMagic) return;
    if(HistoryDealGetInteger(deal, DEAL_ENTRY) != DEAL_ENTRY_OUT) return;
    CsvClosed(deal);   // v39
+   gDayPLDirty = true;   // v44.1
 
    double pl = HistoryDealGetDouble(deal, DEAL_PROFIT) + HistoryDealGetDouble(deal, DEAL_SWAP)
              + HistoryDealGetDouble(deal, DEAL_COMMISSION);

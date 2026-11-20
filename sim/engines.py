@@ -233,3 +233,61 @@ def prev_day_breakout(m1, trade_from=9, close_h=21, tp_mult=1.0, name='PDB'):
 
     return run_engine(m1, 5, sig, dict(sl=sl, tp=lambda bb, i: tp_mult * sl(bb, i),
                                         exit_fn=lambda bb, i, d: h[i] >= close_h or day[i] != day[i - 1]), name=name)
+
+
+def momentum_pullback_h1(m1, rsi_lo=55, rsi_hi=80, dmin=0.5, dmax=3.0, need_pullback=True,
+                         sl_d=40.0, tp_d=25.0, trail_from=16.0, trail_d=16.0, pct=False,
+                         skip=(11, 15), max_open=2, name='MPB'):
+    """Engine modelled on the MyAiGold trade log: decide on the closed H1 candle, enter at the next
+    H1 open in the direction of a rising/falling EMA20 when RSI is strong but not extreme, the
+    close is 0.5-3 ATR from the EMA, and the last candle pulled back. Exits: fixed stop / target,
+    and a stop that trails `trail_d` behind the best price once the trade is `trail_from` in profit,
+    checked every minute. pct=True turns the dollar distances into % of price (x/4400)."""
+    b = resample(m1, 60)
+    c, h, l, o = b['c'], b['h'], b['l'], b['o']
+    e20 = ind.ema(c, 20)
+    r = ind.rsi(c, 14)
+    a = ind.atr(h, l, c, 14)
+    hr = (b['t'] % 86400) // 3600
+    t1 = m1['t']
+    first = b['first']
+    trades, open_ = [], []
+    for i in range(250, len(c) - 1):
+        k = i + 1                                   # the bar that opens now
+        if not (skip[0] <= hr[k] < skip[1]) and len(open_) < max_open:
+            for d in (1, -1):
+                rr = r[i] if d == 1 else 100 - r[i]
+                dist = d * (c[i] - e20[i]) / a[i] if a[i] > 0 else 0
+                ok = (d * (c[i] - e20[i]) > 0 and d * (e20[i] - e20[i - 3]) > 0 and rsi_lo <= rr < rsi_hi
+                      and dmin <= dist < dmax and (not need_pullback or d * (c[i] - o[i]) < 0))
+                if ok and not any(p['d'] == d for p in open_):
+                    j = first[k]
+                    entry = m1['ao'][j] if d == 1 else m1['bo'][j]
+                    sc = entry / 4400.0 if pct else 1.0
+                    open_.append(dict(d=d, op=entry, sl=entry - d * sl_d * sc, tp=entry + d * tp_d * sc,
+                                      best=entry, t=int(t1[j]), sc=sc, name=name))
+                    break
+        j0, j1 = first[k], (first[k + 1] if k + 1 < len(c) else len(t1))
+        for j in range(j0, j1):
+            if not open_:
+                break
+            for p in list(open_):
+                d = p['d']
+                if d == 1:
+                    path = (m1['bl'][j], m1['bh'][j]) if m1['bc'][j] >= m1['bo'][j] else (m1['bh'][j], m1['bl'][j])
+                else:
+                    path = (m1['al'][j], m1['ah'][j]) if m1['ac'][j] >= m1['ao'][j] else (m1['ah'][j], m1['al'][j])
+                done = False
+                for px in path:
+                    if (d == 1 and px <= p['sl']) or (d == -1 and px >= p['sl']):
+                        _close(p, p['sl'], t1[j], 'sl', trades, open_); done = True; break
+                    if (d == 1 and px >= p['tp']) or (d == -1 and px <= p['tp']):
+                        _close(p, p['tp'], t1[j], 'tp', trades, open_); done = True; break
+                    p['best'] = max(p['best'], px) if d == 1 else min(p['best'], px)
+                    if d * (p['best'] - p['op']) >= trail_from * p['sc']:
+                        ns = p['best'] - d * trail_d * p['sc']
+                        if (d == 1 and ns > p['sl']) or (d == -1 and ns < p['sl']):
+                            p['sl'] = ns
+                if done:
+                    continue
+    return trades
