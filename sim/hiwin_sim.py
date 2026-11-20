@@ -21,7 +21,7 @@ DEFAULTS = dict(
     tp_atr=0.5, sl_atr=5.0, time_stop_bars=48, max_spread_atr=0.10,
     start_hour=7, end_hour=21, limit_atr=0.3, limit_wait_bars=3,
     holidays=('2026.12.24', '2026.12.25', '2026.12.26', '2026.12.31', '2027.01.01'),
-    use_s1=True, use_s5=True, bb_period=20, bb_dev=2.0, extreme_bars=12,
+    use_s1=True, use_s5=True, ichi_shift=26, bb_period=20, bb_dev=2.0, extreme_bars=12,
     use_b1=True, b_lookback=20, b_spike_min=1.8, b_atr_min=5.0, b_sl_atr=1.5, b_tp_atr=6.0,
     b_trail_start=1.5, b_trail_atr=1.5, b_max_pos=2, b_lot_mult=1.0, b_cooldown=12,
     adx_min=12.0, range_bars=12, range_min_atr=2.0,
@@ -99,6 +99,10 @@ class Sim:
         self.adx = ind.adx(h, l, c, 14)
         self.bbu, self.bbl = ind.bands(c, P['bb_period'], P['bb_dev'])
         self.spa, self.spb = ind.ichimoku_spans(h, l)
+        sh = P['ichi_shift']
+        if sh:   # value plotted at bar i was computed `sh` bars earlier
+            self.spa = np.concatenate((np.full(sh, np.nan), self.spa[:-sh]))
+            self.spb = np.concatenate((np.full(sh, np.nan), self.spb[:-sh]))
         b15 = resample(m1, 15)
         self.b15 = b15
         self.e20 = ind.ema(b15['c'], 20)
