@@ -25,6 +25,7 @@ DEFAULTS = dict(
     use_s7=False, s7_n=6, s7_comp=1.6, s7_body=1.1, use_s8=False, s8_burst=2.0, use_s9=False, s9_k=2.0, s9_mode='conf', s9_vol=1.5, s9_trend=True, s789_free=True,
     use_s10=False, s10_k=2.0, use_s11=False, s11_n=20, s11_z=2.0, use_s12=False, s12_n=36, s12_rmin=2.0, s12_rmax=5.0, mr_trend=0,
     use_s6m=False, s6m_bars=4, s6m_vel=2.5, s6_volx=0.0, s6_dayext=False,
+    s6_nonew=False, s6_maxbars=0, s6_ema=False,
     use_s6=False, s6_vel=2.2, s6_bars=3, s6_mid=True, s6_tp_atr=0.0, s6_sl_atr=0.0, s6_free=True, s6_with_trend=0,
     use_b1=True, b_lookback=20, b_spike_min=1.8, b_atr_min=5.0, b_sl_atr=1.5, b_tp_atr=6.0,
     b_trail_start=1.5, b_trail_atr=1.5, b_max_pos=2, b_lot_mult=1.0, b_cooldown=12,
@@ -668,6 +669,11 @@ class Sim:
             # back past its own middle -> fade it
             nb = P['s6_bars']
             vel = (c5[k - 1] - c5[k - 1 - nb]) / a
+            if P['s6_maxbars'] > nb:        # strongest run over nb..s6_maxbars candles
+                for q in range(nb + 1, P['s6_maxbars'] + 1):
+                    vq = (c5[k - 1] - c5[k - 1 - q]) / a
+                    if abs(vq) > abs(vel):
+                        vel = vq
             mid = (h5[k - 1] + l5[k - 1]) / 2.0
             if vel >= P['s6_vel'] and (c5[k - 1] < mid or not P['s6_mid']):
                 d, tag = -1, 'S6'
@@ -675,6 +681,12 @@ class Sim:
                 d, tag = 1, 'S6'
             if d != 0 and P['s6_with_trend'] and tr != d:
                 d = 0
+            if d != 0 and P['s6_nonew'] and ((d == -1 and h5[k - 1] > h5[k - 2]) or (d == 1 and l5[k - 1] < l5[k - 2])):
+                d = 0
+            if d != 0 and P['s6_ema']:      # and the close is back past the scalper's fast M15 EMA20
+                e = self.e20[self.m15_of_m5[k] - 1]
+                if (d == -1 and c5[k - 1] >= e) or (d == 1 and c5[k - 1] <= e):
+                    d = 0
             if d != 0 and P['s6_volx'] > 0 and self.v5 is not None:   # volume climax: last bar's ticks vs 20-bar mean
                 if self.v5[k - 1] < P['s6_volx'] * self.v5[k - 21:k - 1].mean():
                     d = 0
