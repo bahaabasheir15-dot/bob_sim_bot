@@ -32,6 +32,7 @@ DEFAULTS = dict(
     max_open_risk_pct=20.0, daily_loss_pct=10.0, emergency_float_pct=25.0,
     recover_spike_guard=True, recover_hours_only=True,
     commission_per_lot_side=3.0, leverage=100.0, contract=100.0,
+    use_ldn=False, ldn_start=3, ldn_end=9, ldn_close=21, ldn_tp=1.0, ldn_lot_mult=0.5,
     deposit=5000.0,
 )
 
@@ -220,6 +221,7 @@ class Sim:
         self.day_start = self.balance
         self.locked = False
         self.last_break = -10**12
+        self.ldn_day = None
         self.k_loaded = -1
         last_k = -1
         self.eq_curve = []
@@ -295,8 +297,13 @@ class Sim:
                     self.locked = True
             # ---- time stop (not B1)
             for x in list(self.pos):
-                if x.tag != 'B1' and t - x.t_open >= P['time_stop_bars'] * 300:
+                if x.tag not in ('B1', 'L1') and t - x.t_open >= P['time_stop_bars'] * 300:
                     self.close_pos(x, bid if x.buy else ask, t, 'time')
+            # ---- engine L closes at its hour
+            if P['use_ldn'] and (t % 86400) // 3600 >= P['ldn_close']:
+                for x in list(self.pos):
+                    if x.tag == 'L1':
+                        self.close_pos(x, bid if x.buy else ask, t, 'ldn_close')
             # ---- B1 trailing (atr from the last loaded bar)
             if P['use_b1'] and self.k_loaded > 0:
                 a = self.atr[self.k_loaded - 1]
@@ -338,7 +345,7 @@ class Sim:
         if P['recover_spike_guard'] and self.k_loaded > 0 and self.spike_now(self.k_loaded):
             return
         for x in list(self.pos):
-            if x.tag in ('R', 'B1'):
+            if x.tag in ('R', 'B1', 'L1'):
                 continue
             if any(y.tag == 'R' and y.parent == x.id for y in self.pos):
                 continue
@@ -416,7 +423,10 @@ class Sim:
                     self.open_pos('B1', d == 1, lot, entry, sl, tp, t, a)
                     self.last_break = self.b5['t'][k]
         # ---- position gate
-        orig = sum(1 for x in self.pos if x.tag not in ('R', 'B1'))
+        # ---- engine L
+        if P['use_ldn']:
+            self.check_london(bid, ask, t, k)
+        orig = sum(1 for x in self.pos if x.tag not in ('R', 'B1', 'L1'))
         if orig + len(self.pend) >= P['max_positions']:
             return
         tr = self.trend(k)
@@ -457,6 +467,37 @@ class Sim:
             if rng < P['range_min_atr']:
                 return
         self.open_trade(d, tag, bid, ask, t, a)
+
+    def check_london(self, bid, ask, t, k):
+        P = self.p
+        b1 = int(self.b5['t'][k - 1])
+        day0 = b1 - b1 % 86400
+        if self.ldn_day == day0:
+            return
+        h = (b1 % 86400) // 3600
+        if h < P['ldn_end'] or h >= P['ldn_close'] - 2:
+            return
+        hi, lo = -1e18, 1e18
+        sh = k - 1
+        while sh >= 0 and self.b5['t'][sh] >= day0:
+            hh = (int(self.b5['t'][sh]) % 86400) // 3600
+            if P['ldn_start'] <= hh < P['ldn_end']:
+                hi = max(hi, self.b5['h'][sh]); lo = min(lo, self.b5['l'][sh])
+            sh -= 1
+        if not hi > lo:
+            return
+        c1 = self.b5['c'][k - 1]
+        d = 1 if c1 > hi else -1 if c1 < lo else 0
+        if d == 0:
+            return
+        self.ldn_day = day0
+        if any(x.tag == 'L1' for x in self.pos):
+            return
+        entry = ask if d == 1 else bid
+        rng = max(hi - lo, 0.5)
+        lot = self.calc_lot(entry, rng, bid, ask) * P['ldn_lot_mult']
+        lot = max(0.01, math.floor(lot / 0.01 + 1e-9) * 0.01)
+        self.open_pos('L1', d == 1, lot, entry, round(entry - d * rng, 2), round(entry + d * P['ldn_tp'] * rng, 2), t, rng)
 
     def open_trade(self, d, tag, bid, ask, t, a):
         P = self.p
