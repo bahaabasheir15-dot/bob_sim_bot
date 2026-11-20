@@ -31,6 +31,7 @@ DEFAULTS = dict(
     max_positions=2, friday_filter=True, friday_stop_hour=20,
     max_open_risk_pct=20.0, daily_loss_pct=10.0, emergency_float_pct=25.0,
     recover_spike_guard=True, recover_hours_only=True,
+    rec_max_legs=1, rec_sr='', rec_sr_tol=0.3, rec_sr_n=24, rec_sr_reject=False, rec_sr_round=10.0,
     commission_per_lot_side=3.0, leverage=100.0, contract=100.0,
     use_ldn=False, ldn_start=3, ldn_end=9, ldn_close=21, ldn_tp=1.0, ldn_lot_mult=0.5, ldn_against_mult=1.0, ldn_risk_pct=0.0, ldn_be_at=0.0, ldn_sl_mult=1.0, ldn_last_entry=19, ldn_min_rng_atr=0.0, ldn_max_rng_atr=99.0, ldn_min_rng_d1=0.0, ldn_max_rng_d1=99.0, ldn_buffer_atr=0.0, ldn_stop_entry=False, ldn_stop_on_ask=False, ldn_fill_at_level=False, ldn_be_lock=0.05, ldn_sar=False,
     dd_throttle_pct=0.0, dd_throttle_mult=0.5, month_stop_pct=0.0, withdraw_pct=0.0,
@@ -123,6 +124,7 @@ class Sim:
         d1 = resample(m1, 1440)
         self.d1t, self.d1o, self.d1c = d1['t'], d1['o'], d1['c']
         self.d1atr = ind.atr(d1['h'], d1['l'], d1['c'], 14)
+        self.d1h, self.d1l = d1['h'], d1['l']
         h1 = resample(m1, 60)
         self.h1 = h1
         self.h1t = h1['t']
@@ -427,13 +429,17 @@ class Sim:
         for x in list(self.pos):
             if x.tag in ('R', 'B1', 'L1', 'T1', 'N1'):
                 continue
-            if any(y.tag == 'R' and y.parent == x.id for y in self.pos):
+            legs = [y for y in self.pos if y.tag == 'R' and y.parent == x.id]
+            if len(legs) >= P['rec_max_legs']:
                 continue
             if x.sl <= 0 or (x.buy and x.sl >= x.op) or (not x.buy and x.sl <= x.op):
                 continue
             a = x.atr_e
-            adverse = (x.op - bid) if x.buy else (ask - x.op)
+            ref = legs[-1].op if legs else x.op
+            adverse = (ref - bid) if x.buy else (ask - ref)
             if adverse < P['recover_at_atr'] * a:
+                continue
+            if P['rec_sr'] and not self.at_level(x.buy, bid, ask, t, a, ref):
                 continue
             lot = max(0.01, min(math.floor(x.lots * P['recover_lot_mult'] / 0.01 + 1e-9) * 0.01, P['max_lot']))
             px = ask if x.buy else bid
@@ -441,7 +447,7 @@ class Sim:
             m = lot * P['contract'] * px / P['leverage']
             if m > (eq - self.used_margin(px)) * P['max_margin_pct'] / 100.0:
                 continue
-            avg = (x.op * x.lots + px * lot) / (x.lots + lot)
+            avg = (x.op * x.lots + sum(y.op * y.lots for y in legs) + px * lot) / (x.lots + sum(y.lots for y in legs) + lot)
             tp = round(avg + P['recover_tp_atr'] * a if x.buy else avg - P['recover_tp_atr'] * a, 2)
             if x.buy and tp - bid <= 0:
                 continue
@@ -459,6 +465,36 @@ class Sim:
             self.open_pos('R', x.buy, lot, px, gsl, tp, t, a, parent=x.id)
             x.tp = tp
             x.sl = gsl
+            for y in legs:
+                y.tp = tp
+
+    def at_level(self, buy, bid, ask, t, a, op):
+        """Signal-based averaging: add the recovery leg only when price stands at a support (buy) /
+        resistance (sell): previous day low/high ('d'), lowest/highest H1 low/high of the last
+        rec_sr_n closed H1 bars ('h'), or a round number ('r'). Optional rejection candle on M5."""
+        P = self.p
+        px = bid if buy else ask
+        tol = P['rec_sr_tol'] * a
+        lv = []
+        if 'd' in P['rec_sr']:
+            j = np.searchsorted(self.d1t, t, side='right') - 2
+            if j >= 0:
+                lv.append(self.d1l[j] if buy else self.d1h[j])
+        if 'h' in P['rec_sr']:
+            j = np.searchsorted(self.h1t, t, side='right') - 2
+            if j >= P['rec_sr_n']:
+                w = slice(j - P['rec_sr_n'] + 1, j + 1)
+                lv.append(self.h1['l'][w].min() if buy else self.h1['h'][w].max())
+        if 'r' in P['rec_sr']:
+            R = P['rec_sr_round']
+            lv.append(round(px / R) * R)
+        ok = any(abs(px - L) <= tol and ((L < op) if buy else (L > op)) for L in lv)
+        if ok and P['rec_sr_reject'] and self.k_loaded > 0:
+            k = self.k_loaded - 1
+            o5, h5, l5, c5 = self.b5['o'][k], self.b5['h'][k], self.b5['l'][k], self.b5['c'][k]
+            body = abs(c5 - o5)
+            ok = (c5 > o5 and min(o5, c5) - l5 > body) if buy else (c5 < o5 and h5 - max(o5, c5) > body)
+        return ok
 
     def new_bar(self, bid, ask, t, k):
         P = self.p
