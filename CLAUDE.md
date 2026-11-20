@@ -6,16 +6,16 @@
 - Rule we always follow: a change is accepted only if it improves EVERY year on its own (2023, 2024, 2025, 2026) and holds with several nearby settings. Pick the middle of what works, not the best value.
 
 ## Current state (2026-11-20)
-- **Best version: v45.2** — `ea/XAU_HiWin_EA_v45.mq5`, `#property version "45.20"`, magic `20263255`.
-- Engines (comment tag on each trade): scalper `S1` `S4` `S5` (M5 pullback, TP 0.5 ATR, SL 7 ATR, limit entry), recovery leg `R` (group closes at average entry), London breakout `L1` (Asian range 03-09 server, SL 1.75 ranges, TP 1 range, close 21:00, half lot), H1 trend `T1` (55-bar break, SL 3 ATR, trail 4 ATR, 0.25% risk, skips if min lot > 1% risk), night drift `N1` (buy 01:05 sell 04:00 server time, only after a day that moved >= 1%, no Mondays, full lot, stop 0.5% of price).
+- **Best version: v45.3** — `ea/XAU_HiWin_EA_v45_3.mq5`, `#property version "45.30"`, magic `20263255` (same as v45.2). = v45.2 + scalper setup `S6` (velocity exhaustion). Older v45.2 = `ea/XAU_HiWin_EA_v45.mq5`; `InpUseS6=false` turns v45.3 back into v45.2.
+- Engines (comment tag on each trade): scalper `S1` `S4` `S5` `S6` (M5 pullback / S6 = 4 candles ran >= 2.5 ATR and candle 1 closed back past its middle -> fade; skips ADX/spike/ATR-floor filters, TP 0.5 ATR, SL 7 ATR, limit entry), recovery leg `R` (group closes at average entry), London breakout `L1` (Asian range 03-09 server, SL 1.75 ranges, TP 1 range, close 21:00, half lot), H1 trend `T1` (55-bar break, SL 3 ATR, trail 4 ATR, 0.25% risk, skips if min lot > 1% risk), night drift `N1` (buy 01:05 sell 04:00 server time, only after a day that moved >= 1%, no Mondays, full lot, stop 0.5% of price).
 - Tester, Vantage XAUUSD+, 2023.01.01-2026.11.19, real ticks:
   - v45.2 from $1,000: net +44,138, PF 1.68, max DD 27.8% (in 2023, small account = min-lot effect), median month +5.7%, worst month -10.3%. Years: 2023 -7, 2024 +531, 2025 +2,257, 2026 +41,416.
   - v45.1 from $5,000: net +105,486, PF 1.66, max DD 16.7%. Years: 2023 -353, 2024 +1,527, 2025 +7,790, 2026 +96,685.
   - Simulator v45.2 from $5,000: final 249,773, max DD 15.3%, worst month -3.8%.
-- **Candidate v45.3** — `ea/XAU_HiWin_EA_v45_3.mq5` (version 45.30, same magic): v45.2 + scalper setup `S6` velocity exhaustion (4 M5 candles ran >= 2.5 ATR, candle 1 closed back past its middle -> fade with the normal scalper order + recovery leg; skips ADX/spike/ATR-floor filters). Simulator $5,000: 249,773 -> 374,143, every year better, DD 15.3% -> 16.4%. Sim param `use_s6=True, s6_bars=4, s6_vel=2.5`. Waiting for the user's MT5 tester run before it goes on demo (log section 34).
+  - **v45.3 from $5,000 (tester, confirmed 2026-11-20): net +360,512, PF 1.63, max DD 16.4%, median month +4.8%, worst month -4.2%, losing months 12/47. Years $: 2023 -71, 2024 +2,775, 2025 +14,861, 2026 +343,118. Per 0.01 every year better than v45.2 (log section 40). Simulator: 374,143.** Sim params = v45.2 dict + `use_s6=True, s6_bars=4, s6_vel=2.5`.
 - Known weakness: calm years like 2023 are roughly flat (only the night engine made money in 2023). Nothing tried fixed 2023 without hurting other years.
 
-## Demo accounts (both on MetaTrader VPS, both v45.2, local algo trading OFF)
+## Demo accounts (both on MetaTrader VPS, local algo trading OFF; v45.2, user told to move both to v45.3 on 2026-11-20)
 | Account | Broker / symbol | Balance | InpHourShift | VPS |
 |---|---|---|---|---|
 | 895781 | IFCMarkets-Demo, `XAUUSD` (spread ~46 pts) | ~$5,031 | -1 (server 1h behind Vantage) | Amsterdam |
@@ -33,11 +33,11 @@
 - `analysis/analyze_tester_report.py` — parse any MT5 tester report (HTML or PDF) into trades and rescue groups.
 - `sim/engines.py` — stand-alone test engines (London, Donchian, session/prev-day breakouts, liquidity sweep, H1 momentum pullback).
 - `sim/ml_filter.py` — walk-forward ML trade filter (tested, rejected).
-- `analysis/v38_deep_analysis_AR.md` — full research log in Arabic (sections 1-27): every idea tried, with numbers.
+- `analysis/v38_deep_analysis_AR.md` — full research log in Arabic (sections 1-40): every idea tried, with numbers.
 - `docs/XAU_HiWin_v45.2_Summary_AR.pdf`, `docs/XAU_HiWin_v45.2_Guide_AR.pdf` — summary and operation guide for the user.
 
 ## Things already tried and rejected (do not re-propose without new evidence)
-Tighter group stop, removing the recovery leg, break-even moves, second-chance reverse trades, monthly stop, drawdown throttle (too sensitive), NY breakout, previous-day breakout, fading London, ICT liquidity sweep, previous-day S/R rejection, S2/S3 setups, B1 breakout engine (lost 2024/2025), copying MyAiGold's visible rules (PF ~1.1), ALLYLLA's 3h break-even exit and rollover/weekend filters, ML trade filter, volatility-regime model, bigger night lot after a losing day, night lot > 2 (DD jumps), VWAP bands, Asian box + daily ATR filter / stop-order entry, M5 trend pullback + RSI reset, Z-score reversion, FVG, recovery only at support/resistance or multi-leg, time-of-day statistics matrix, efficiency-ratio friction->flow (log sections 28-33).
+Tighter group stop, removing the recovery leg, break-even moves, second-chance reverse trades, monthly stop, drawdown throttle (too sensitive), NY breakout, previous-day breakout, fading London, ICT liquidity sweep, previous-day S/R rejection, S2/S3 setups, B1 breakout engine (lost 2024/2025), copying MyAiGold's visible rules (PF ~1.1), ALLYLLA's 3h break-even exit and rollover/weekend filters, ML trade filter, volatility-regime model, bigger night lot after a losing day, night lot > 2 (DD jumps), VWAP bands, Asian box + daily ATR filter / stop-order entry, M5 trend pullback + RSI reset, Z-score reversion, FVG, recovery only at support/resistance or multi-leg, time-of-day statistics matrix, efficiency-ratio friction->flow, A1 hybrid, entry-only S7/S8/S9/S10/S11/S12, S6 variants (volume climax, day extreme, M15, 4-6 bars, no-new-high) (log sections 28-39).
 
 ## Other bots the user looked at
 - **MyAiGold** (MQL5 market, $900, AI, published 2026-09-04): per 0.01 lot +1,010 / +1,787 / +1,939 / +1,680 (2023-2026), monthly correlation with our bot 0.11 — a good companion if its live signals keep working; use Balance Step >= 1000. v44.1+ counts its own daily loss only, so it can share an account.
