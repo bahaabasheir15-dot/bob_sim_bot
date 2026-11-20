@@ -348,3 +348,61 @@ def liquidity_sweep(m1, start_h=3, end_h=9, until_h=18, close_h=21, rr=2.0, buf=
     return run_engine(m1, 5, sig, dict(sl=lambda bb, i: max(sl_dist[i], 0.5),
                                         tp=lambda bb, i: rr * max(sl_dist[i], 0.5),
                                         exit_fn=lambda bb, i, d: h[i] >= close_h or day[i] != day[i - 1]), name=name)
+
+
+def vwap_engine(m1, vol, mode='trend', anchor_h=0, from_h=9, until_h=19, close_h=21,
+                touch=0.0, slope_k=0.1, sl_sd=1.5, rr=1.5, flat_k=0.05, ext_sd=2.0, name='VWAP'):
+    """Session VWAP (anchored at server hour `anchor_h`) with volume-weighted +-sd bands, M5.
+    mode 'trend': VWAP rising (falling) by more than slope_k x ATR over the last hour; the closed
+        candle dipped to VWAP + touch x sd (touch=0: VWAP itself, -1: the -1 sd band) and closed back
+        above VWAP -> buy (mirror for sell). Stop sl_sd x sd below VWAP, target rr x risk.
+    mode 'range': VWAP flat (|slope| < flat_k x ATR); close beyond +-ext_sd x sd -> fade back to VWAP,
+        stop at +-(ext_sd + 1) sd.  One trade per day, flat at close_h."""
+    b = resample(m1, 5)
+    v = np.add.reduceat(vol.astype(np.float64), b['first'])
+    t = b['t']
+    tp = (b['h'] + b['l'] + b['c']) / 3.0
+    sess = (t - anchor_h * 3600) // 86400
+    cv = np.zeros(len(t)); cpv = np.zeros(len(t)); cp2 = np.zeros(len(t))
+    for i in range(len(t)):
+        if i == 0 or sess[i] != sess[i - 1]:
+            cv[i], cpv[i], cp2[i] = v[i], v[i] * tp[i], v[i] * tp[i] ** 2
+        else:
+            cv[i], cpv[i], cp2[i] = cv[i - 1] + v[i], cpv[i - 1] + v[i] * tp[i], cp2[i - 1] + v[i] * tp[i] ** 2
+    vw = cpv / np.maximum(cv, 1e-9)
+    sd = np.sqrt(np.maximum(cp2 / np.maximum(cv, 1e-9) - vw ** 2, 0.0))
+    a = ind.atr(b['h'], b['l'], b['c'], 14)
+    h = _hour(t)
+    day = t // 86400
+    done = set()
+    dist = {}
+
+    def sig(bb, i):
+        if i < 13 or day[i] in done or not (from_h <= h[i] < until_h) or sess[i] != sess[i - 12]:
+            return 0
+        if not (a[i] > 0 and sd[i] > 0):
+            return 0
+        slope = vw[i] - vw[i - 12]
+        c = bb['c'][i]
+        if mode == 'trend':
+            if slope > slope_k * a[i] and bb['l'][i] <= vw[i] + touch * sd[i] and c > vw[i]:
+                done.add(day[i]); dist[i] = (c - (vw[i] - sl_sd * sd[i]), None); return 1
+            if slope < -slope_k * a[i] and bb['h'][i] >= vw[i] - touch * sd[i] and c < vw[i]:
+                done.add(day[i]); dist[i] = ((vw[i] + sl_sd * sd[i]) - c, None); return -1
+        else:
+            if abs(slope) < flat_k * a[i]:
+                if c >= vw[i] + ext_sd * sd[i]:
+                    done.add(day[i]); dist[i] = (vw[i] + (ext_sd + 1) * sd[i] - c, c - vw[i]); return -1
+                if c <= vw[i] - ext_sd * sd[i]:
+                    done.add(day[i]); dist[i] = (c - (vw[i] - (ext_sd + 1) * sd[i]), vw[i] - c); return 1
+        return 0
+
+    def sl(bb, i):
+        return max(dist[i][0], 0.5)
+
+    def tpf(bb, i):
+        r, target = dist[i]
+        return max(target, 0.3) if target is not None else rr * max(r, 0.5)
+
+    return run_engine(m1, 5, sig, dict(sl=sl, tp=tpf, exit_fn=lambda bb, i, d: h[i] >= close_h or day[i] != day[i - 1]),
+                      name=name)
