@@ -26,6 +26,7 @@ DEFAULTS = dict(
     use_s10=False, s10_k=2.0, use_s11=False, s11_n=20, s11_z=2.0, use_s12=False, s12_n=36, s12_rmin=2.0, s12_rmax=5.0, mr_trend=0,
     use_s6m=False, s6m_bars=4, s6m_vel=2.5, s6_volx=0.0, s6_dayext=False,
     s6_nonew=False, s6_maxbars=0, s6_ema=False,
+    scalp_from=0, scalp_to=24, scalp_block=(), scalp_block_min=(),
     use_s6=False, s6_vel=2.2, s6_bars=3, s6_mid=True, s6_tp_atr=0.0, s6_sl_atr=0.0, s6_free=True, s6_with_trend=0,
     use_b1=True, b_lookback=20, b_spike_min=1.8, b_atr_min=5.0, b_sl_atr=1.5, b_tp_atr=6.0,
     b_trail_start=1.5, b_trail_atr=1.5, b_max_pos=2, b_lot_mult=1.0, b_cooldown=12,
@@ -571,6 +572,12 @@ class Sim:
         orig = sum(1 for x in self.pos if x.tag not in ('R', 'B1', 'L1', 'T1', 'N1'))
         if orig + len(self.pend) >= P['max_positions']:
             return
+        if not (P['scalp_from'] <= sh < P['scalp_to']) or sh in P['scalp_block']:
+            return
+        if P['scalp_block_min']:      # (from_min, to_min) windows of the server day, e.g. US data at 15:30
+            mm = (sig_t % 86400) // 60
+            if any(a0 <= mm < a1 for a0, a1 in P['scalp_block_min']):
+                return
         tr = self.trend(k)
         d, tag = 0, ''
         nospike = not self.spike_now(k)
