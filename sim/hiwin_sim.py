@@ -45,6 +45,7 @@ DEFAULTS = dict(
     use_night=False, night_entry_min=65, night_exit_min=240, night_skip_monday=True, night_lot_mult=1.0, night_sl_pct=1.0, night_min_prev_pct=0.0, night_quiet_mult=0.0, night_after_loss_mult=1.0, ldn_skip_from=99, ldn_skip_to=99,
     use_swing=False, sw_n=120, sw_sl_pct=0.45, sw_tp_pct=3.0, sw_be_pct=0.15, sw_be_lock_pct=0.02, sw_buf=0.2,
     sw_risk_pct=0.5, sw_max_minlot_risk=2.0, sw_stack=1, sw_both=True,
+    use_sw2=False, sw2_n=96, sw2_sl_pct=0.45, sw2_tp_pct=0.5, sw2_be_pct=0.15, sw2_risk_pct=0.25,
     deposit=5000.0,
 )
 
@@ -292,6 +293,8 @@ class Sim:
         self.night_day = None
         self.sw_pend = []
         self.sw_k = -1
+        self.sw2_pend = []
+        self.sw2_k = -1
         self.gap_tick = False
         self.ldn_stop = None      # (day, dir) of today's stopped London trade
         self.ldn_second = None
@@ -382,6 +385,8 @@ class Sim:
             self.manage_night(bid, ask, t)
         if P['use_swing']:
             self.manage_swing(bid, ask, t)
+        if P['use_sw2']:
+            self.manage_swing(bid, ask, t, second=True)
         if self.pos:
             # ---- emergency
             if P['emergency_float_pct'] > 0:
@@ -405,7 +410,7 @@ class Sim:
                         self.close_pos(x, bid if x.buy else ask, t, 'be_time')
             # ---- time stop (not B1)
             for x in list(self.pos):
-                if x.tag not in ('B1', 'L1', 'T1', 'N1', 'X1') and t - x.t_open >= P['time_stop_bars'] * 300:
+                if x.tag not in ('B1', 'L1', 'T1', 'N1', 'X1', 'X2') and t - x.t_open >= P['time_stop_bars'] * 300:
                     self.close_pos(x, bid if x.buy else ask, t, 'time')
             # ---- engine L closes at its hour
             if P['use_ldn']:
@@ -462,7 +467,7 @@ class Sim:
         if P['recover_spike_guard'] and self.k_loaded > 0 and self.spike_now(self.k_loaded):
             return
         for x in list(self.pos):
-            if x.tag in ('R', 'B1', 'L1', 'T1', 'N1', 'X1'):
+            if x.tag in ('R', 'B1', 'L1', 'T1', 'N1', 'X1', 'X2'):
                 continue
             legs = [y for y in self.pos if y.tag == 'R' and y.parent == x.id]
             if len(legs) >= P['rec_max_legs']:
@@ -579,7 +584,7 @@ class Sim:
         # ---- engine L
         if P['use_ldn'] and not P['ldn_stop_entry']:
             self.check_london(bid, ask, t, k)
-        orig = sum(1 for x in self.pos if x.tag not in ('R', 'B1', 'L1', 'T1', 'N1', 'X1'))
+        orig = sum(1 for x in self.pos if x.tag not in ('R', 'B1', 'L1', 'T1', 'N1', 'X1', 'X2'))
         if orig + len(self.pend) >= P['max_positions']:
             return
         if not (P['scalp_from'] <= sh < P['scalp_to']) or sh in P['scalp_block']:
@@ -746,13 +751,21 @@ class Sim:
                 return
         self.open_trade(d, tag, bid, ask, t, a)
 
-    def manage_swing(self, bid, ask, t):
+    def manage_swing(self, bid, ask, t, second=False):
         """ENGINE X (from the Gold Beaver EA): stop orders at the high / low of the last sw_n H4 candles,
         refreshed at every H4 open; stop and target in % of price; break-even at sw_be_pct."""
-        P = self.p
+        P = dict(self.p)
+        tag = 'X2' if second else 'X1'
+        if second:
+            for q in ('n', 'sl_pct', 'tp_pct', 'be_pct', 'risk_pct'):
+                P['sw_' + q] = P['sw2_' + q]
+        pend = self.sw2_pend if second else self.sw_pend
         k = int(np.searchsorted(self.h4t, t, side='right') - 1)
-        if k != self.sw_k:
-            self.sw_k = k
+        if k != (self.sw2_k if second else self.sw_k):
+            if second:
+                self.sw2_k = k
+            else:
+                self.sw_k = k
             n = P['sw_n']
             if k > n:
                 hi = self.h4h[k - n:k].max() + P['sw_buf']
@@ -760,15 +773,17 @@ class Sim:
                 for d, lv in ((1, hi), (-1, lo)):
                     if d == -1 and not P['sw_both']:
                         continue
-                    same = [o for o in self.sw_pend if o[0] == d]
+                    same = [o for o in pend if o[0] == d]
                     if P['sw_stack'] <= 1:
-                        self.sw_pend = [o for o in self.sw_pend if o[0] != d] + [(d, lv)]
+                        for o in same:
+                            pend.remove(o)
+                        pend.append((d, lv))
                     elif len(same) < P['sw_stack']:
-                        self.sw_pend.append((d, lv))
-        for o in list(self.sw_pend):
+                        pend.append((d, lv))
+        for o in list(pend):
             d, lv = o
             if (d == 1 and ask >= lv) or (d == -1 and bid <= lv):
-                self.sw_pend.remove(o)
+                pend.remove(o)
                 if self.locked:
                     continue
                 sp = ask - bid
@@ -780,10 +795,10 @@ class Sim:
                 if lot < 0.01 and lpl * 0.01 > eq * P['sw_max_minlot_risk'] / 100.0:
                     continue
                 lot = max(0.01, min(math.floor(lot / 0.01 + 1e-9) * 0.01, P['max_lot']))
-                self.open_pos('X1', d == 1, lot, op, round(op - d * sld, 2), round(op + d * op * P['sw_tp_pct'] / 100.0, 2), t, sld)
+                self.open_pos(tag, d == 1, lot, op, round(op - d * sld, 2), round(op + d * op * P['sw_tp_pct'] / 100.0, 2), t, sld)
         if P['sw_be_pct'] > 0:
             for x in self.pos:
-                if x.tag != 'X1':
+                if x.tag != tag:
                     continue
                 d = 1 if x.buy else -1
                 fav = (bid - x.op) if x.buy else (x.op - ask)
