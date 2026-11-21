@@ -43,14 +43,6 @@
 //|  max DD 15.3% -> 16.4%, worst month -3.8% -> -4.6%.
 //|  Every year better also at 2.2/2.8 ATR and with 3 candles at 2.2/2.4.
 //|  Switch it off with InpUseS6 = false (= v45.2 exactly).
-//|  v45.31: InpLdnMaxMinLot - small-account guard for engine L (OFF = 0).
-//|  Under ~$1,000 the London trade is forced up to the minimum lot (up to
-//|  4x its normal size) and in 2023 it cost a $500 account most of a 45%
-//|  drawdown. With 2.0 the trade is skipped while the min lot's stop would
-//|  cost more than 2% of equity. Tester-equivalent simulator, $500:
-//|  max DD 45.5% -> 17.8%, worst month -17.8% -> -9.4%, 2023 -18 -> +39,
-//|  but final 39,313 -> 18,434 (slower start). $1,000: DD 26.2% -> 18.3%,
-//|  final 59,086 -> 46,458. $5,000: no effect. Use 2.0 below $1,000-2,000.
 //+------------------------------------------------------------------+
 //+------------------------------------------------------------------+
 //|  XAU HiWin  v44                                      magic 20263254
@@ -306,7 +298,7 @@
 //|  Test on DEMO first. Needs M5 (the EA reads M5/M15 itself).      |
 //+------------------------------------------------------------------+
 #property copyright "XAU HiWin"
-#property version   "45.31"
+#property version   "45.30"
 #property description "XAU HiWin v45: v44.2 + night drift engine. magic 20263255."
 
 #include <Trade\Trade.mqh>
@@ -440,7 +432,6 @@ input int    InpLdnCloseHour    = 21;         // close whatever is still open at
 input double InpLdnTPmult       = 1.0;        // target = this many range widths
 input double InpLdnSLmult       = 1.75;       // v44: stop = this many range widths (v43: 1.0)
 input double InpLdnLotMult      = 0.5;        // lot = normal sizing rule x this
-input double InpLdnMaxMinLot    = 0.0;        // v45.31: small account - skip L1 if the forced min lot's stop costs > this % of equity (0 = off, 2.0 for < $1,000)
 
 //=== ENGINE T - H1 trend follower (v43) ==============================
 input group "Engine T: H1 trend follower (v43)"
@@ -1380,14 +1371,7 @@ void CheckLondon()
    double step = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP); if(step <= 0) step = 0.01;
    double lot = CalcLot(dir, entry, InpLdnSLmult * rng) * MathMax(0.0, InpLdnLotMult);
    lot = MathFloor(lot / step + 1e-9) * step;
-   double vminL = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
-   if(InpLdnMaxMinLot > 0 && lot <= vminL + 1e-9)
-   {   // v45.31: the min lot is at least what the sizing rule wants - is its stop affordable?
-      double lplL = LossPerLot(dir, entry, InpLdnSLmult * rng);
-      if(lplL * vminL > AccountInfoDouble(ACCOUNT_EQUITY) * InpLdnMaxMinLot / 100.0)
-      { gStatus = "L1 skipped: min lot would risk too much (small account)"; return; }
-   }
-   lot = MathMax(lot, vminL);
+   lot = MathMax(lot, SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN));
    lot = MathMin(lot, SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MAX));
 
    bool ok = (dir == 1) ? trade.Buy (lot, _Symbol, 0.0, sl, tp, "L1")
