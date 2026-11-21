@@ -12,7 +12,9 @@
   - v45.2 from $1,000: net +44,138, PF 1.68, max DD 27.8% (in 2023, small account = min-lot effect), median month +5.7%, worst month -10.3%. Years: 2023 -7, 2024 +531, 2025 +2,257, 2026 +41,416.
   - v45.1 from $5,000: net +105,486, PF 1.66, max DD 16.7%. Years: 2023 -353, 2024 +1,527, 2025 +7,790, 2026 +96,685.
   - Simulator v45.2 from $5,000: final 249,773, max DD 15.3%, worst month -3.8%.
-  - **v45.3 from $5,000 (tester, confirmed 2026-11-20): net +360,512, PF 1.63, max DD 16.4%, median month +4.8%, worst month -4.2%, losing months 12/47. Years $: 2023 -71, 2024 +2,775, 2025 +14,861, 2026 +343,118. Per 0.01 every year better than v45.2 (log section 40). Simulator: 374,143.** Sim params = v45.2 dict + `use_s6=True, s6_bars=4, s6_vel=2.5`.
+  - **v45.3 from $5,000 (tester, confirmed 2026-11-20): net +360,512, PF 1.63, max DD 16.4%, median month +4.8%, worst month -4.2%, losing months 12/47. Years $: 2023 -71, 2024 +2,775, 2025 +14,861, 2026 +343,118. Per 0.01 every year better than v45.2 (log section 40). Simulator: 374,143.**
+  - v45.3 from $500 (tester): final 48,076, PF 1.64, but max DD 44.9% (June 2023, balance fell to ~$290), worst month -17.7%, 2023 +2 — min lot 0.01 = double the normal risk under $1,000. Advise >= $1,000 (ideally $5,000) or a cent account.
+  - Sim params = v45.2 dict + `use_s6=True, s6_bars=4, s6_vel=2.5`.
 - Known weakness: calm years like 2023 are roughly flat (only the night engine made money in 2023). Nothing tried fixed 2023 without hurting other years.
 
 ## Demo accounts (both on MetaTrader VPS, local algo trading OFF; v45.2, user told to move both to v45.3 on 2026-11-20)
