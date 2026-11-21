@@ -32,6 +32,7 @@
 - `python3 -m sim.account_run data/xauusd_plus_m1_2023_2026.npz "[('name', {params})]"` — full account ($5,000 default, `deposit=`), money by year and month.
 - `python3 -m sim.research data/xauusd_plus_m1_2023_2026.npz "BASE_DICT" "[('name', {overrides}), ...]"` — fixed 0.01 lot, per-year net/DD for many variants in parallel.
 - `python3 -m sim.calibrate_vs_report <npz> <report.html> "<params dict>"` — match the simulator against an MT5 report.
+- `python3 -m sim.demo_compare report.html [m1_export.csv] [--shift -1] [--from YYYY.MM.DD]` — weekly demo check: MT5 account report (with Fee column) vs simulator v45.2, trade by trade, per engine. Needs an MT5 M1 export (Symbols > Bars > Export) for days after 2026-11-20. IFC account: `--shift -1`, and only timing/count is comparable (sim uses Vantage prices).
 - `analysis/analyze_tester_report.py` — parse any MT5 tester report (HTML or PDF) into trades and rescue groups.
 - `sim/engines.py` — stand-alone test engines (London, Donchian, session/prev-day breakouts, liquidity sweep, H1 momentum pullback).
 - `sim/ml_filter.py` — walk-forward ML trade filter (tested, rejected).
