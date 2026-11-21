@@ -43,6 +43,7 @@ Tighter group stop, removing the recovery leg, break-even moves, second-chance r
 
 ## Other bots the user looked at
 - **MyAiGold** (MQL5 market, $900, AI, published 2026-09-04): per 0.01 lot +1,010 / +1,787 / +1,939 / +1,680 (2023-2026), monthly correlation with our bot 0.11 — a good companion if its live signals keep working; use Balance Step >= 1000. v44.1+ counts its own daily loss only, so it can share an account.
+- **Gold Beaver** (MQL5 market product 177869, seller signal "القندس الذهبي" 27 weeks live, PF 7.66, copy $999/month — do not copy the signal): H4 swing high/low breakout stop orders refreshed every 4 h, two sets [A] (SL ~0.25-0.5%, TP ~0.4%) and [B] (SL ~0.9%, TP ~4%), instant break-even, stacks up to 6 orders. User tester Vantage 2023-2026, $5,000, Mode=15, Inp_Lot_Percent=11.6: +635,965, PF 6.8, positive every year (+1,298 / +4,081 / +42,788 / +586,832), worst month -6.4%, DD ~21% (2023). Top 50 trades = 93% of profit. Monthly correlation with v45.3 0.50; a 50/50 split cuts the monthly drawdown to 4.5% and makes 2023 +12% (log sections 45-46). Next: separate $5,000 Vantage demo, tester at lower risk and with IFC spread.
 - **ALLYLLA Pullback Bot**: lost in 2023, correlation 0.83 with ours — not a useful companion.
 
 ## Automatic research
