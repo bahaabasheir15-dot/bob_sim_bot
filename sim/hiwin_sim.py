@@ -46,6 +46,7 @@ DEFAULTS = dict(
     use_night=False, night_entry_min=65, night_exit_min=240, night_skip_monday=True, night_lot_mult=1.0, night_sl_pct=1.0, night_min_prev_pct=0.0, night_quiet_mult=0.0, night_after_loss_mult=1.0, ldn_skip_from=99, ldn_skip_to=99,
     use_swing=False, sw_n=120, sw_sl_pct=0.45, sw_tp_pct=3.0, sw_be_pct=0.15, sw_be_lock_pct=0.02, sw_buf=0.2,
     sw_risk_pct=0.5, sw_max_minlot_risk=2.0, sw_stack=1, sw_both=True,
+    sw_min_width_pct=0.0, sw_max_width_pct=99.0,
     use_sw2=False, sw2_n=96, sw2_sl_pct=0.45, sw2_tp_pct=0.5, sw2_be_pct=0.15, sw2_risk_pct=0.25,
     deposit=5000.0,
 )
@@ -783,6 +784,9 @@ class Sim:
             if k > n:
                 hi = self.h4h[k - n:k].max() + P['sw_buf']
                 lo = self.h4l[k - n:k].min() - P['sw_buf']
+                wpct = (hi - lo) / lo * 100.0
+                if not (P['sw_min_width_pct'] <= wpct < P['sw_max_width_pct']):
+                    hi, lo = 1e12, -1e12        # channel too narrow / too wide: no levels this candle
                 for d, lv in ((1, hi), (-1, lo)):
                     if d == -1 and not P['sw_both']:
                         continue
