@@ -23,6 +23,7 @@ DEFAULTS = dict(
     holidays=('2026.12.24', '2026.12.25', '2026.12.26', '2026.12.31', '2027.01.01'),
     use_s1=True, use_s5=True, use_s2=False, use_s3=False, use_s4=False, s2_rsi=35.0, s3_rsi=45.0, ichi_shift=26, bb_period=20, bb_dev=2.0, extreme_bars=12,
     use_s7=False, s7_n=6, s7_comp=1.6, s7_body=1.1, use_s8=False, s8_burst=2.0, use_s9=False, s9_k=2.0, s9_mode='conf', s9_vol=1.5, s9_trend=True, s789_free=True,
+    use_s13=False, s13_n=72, s13_k=8, s13_trend=0,
     use_s10=False, s10_k=2.0, use_s11=False, s11_n=20, s11_z=2.0, use_s12=False, s12_n=36, s12_rmin=2.0, s12_rmax=5.0, mr_trend=0,
     use_s6m=False, s6m_bars=4, s6m_vel=2.5, s6_volx=0.0, s6_dayext=False,
     s6_nonew=False, s6_maxbars=0, s6_ema=False,
@@ -630,7 +631,7 @@ class Sim:
                 d, tag = 1, 'S4'
             elif ts == -1 and r1 > 100 - P['s2_rsi']:
                 d, tag = -1, 'S4'
-        if d == 0 and (P['use_s7'] or P['use_s8'] or P['use_s9'] or P['use_s10'] or P['use_s11'] or P['use_s12']):
+        if d == 0 and (P['use_s7'] or P['use_s8'] or P['use_s9'] or P['use_s10'] or P['use_s11'] or P['use_s12'] or P['use_s13']):
             o5 = self.b5['o']
             if P['use_s7']:      # compression -> impulse breakout, with the M15 EMA50
                 n = P['s7_n']
@@ -681,6 +682,18 @@ class Sim:
                         d, tag = -1, 'S12'
                     elif l5[k - 1] <= RL + 0.1 * a and c5[k - 1] > RL and c5[k - 1] > mid1:
                         d, tag = 1, 'S12'
+            if d == 0 and P['use_s13']:    # U-shape liquidity sweep: old swing low taken out, candle closes back above it
+                n, kk = P['s13_n'], P['s13_k']
+                lvl_lo = l5[k - 1 - n:k - 1 - kk].min()
+                lvl_hi = h5[k - 1 - n:k - 1 - kk].max()
+                swept_lo = l5[k - 1 - kk:k].min() < lvl_lo
+                swept_hi = h5[k - 1 - kk:k].max() > lvl_hi
+                if swept_lo and c5[k - 2] <= lvl_lo and c5[k - 1] > lvl_lo:
+                    d, tag = 1, 'S13'
+                elif swept_hi and c5[k - 2] >= lvl_hi and c5[k - 1] < lvl_hi:
+                    d, tag = -1, 'S13'
+                if d != 0 and P['s13_trend'] and tr != d * P['s13_trend']:
+                    d = 0
             if d != 0 and tag in ('S10', 'S11', 'S12') and P['mr_trend'] and tr != d * P['mr_trend']:
                 d = 0
             if d != 0 and P['s789_free']:
