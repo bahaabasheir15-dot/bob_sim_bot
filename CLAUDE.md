@@ -22,7 +22,7 @@
 - v45.7 design — `ea/XAU_HiWin_EA_v45_7.mq5` (45.70) = v45.6 + X1 break-even 0.15% -> 0.30% (`InpSwBEpct`) + night lot 1.0 -> 1.5 (`InpNightLotMult`). Sim $5,000: 916,007 -> 1,450,935, every year better, DD 15.0% -> 16.6%, worst month -6.5% -> -7.3%. Sim params: + `night_hold_h=12, sw_be_pct=0.3, night_lot_mult=1.5` (log section 57). Confirmed in tester (log 59).
 - Known weakness: calm years like 2023 are roughly flat (only the night engine made money in 2023). Nothing tried fixed 2023 without hurting other years.
 
-## Demo accounts (both on MetaTrader VPS, local algo trading OFF; v45.2, user told to move both to v45.3 on 2026-11-20)
+## Demo accounts (both on MetaTrader VPS, local algo trading OFF). 2026-11-21: Vantage moved to v45.71 small edition and migrated to VPS (Ashburn) OK; IFC to be moved to v45.7 (InpHourShift -1)
 | Account | Broker / symbol | Balance | InpHourShift | VPS |
 |---|---|---|---|---|
 | 895781 | IFCMarkets-Demo, `XAUUSD` (spread ~46 pts) | ~$5,031 | -1 (server 1h behind Vantage) | Amsterdam |
