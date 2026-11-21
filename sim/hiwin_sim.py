@@ -38,7 +38,7 @@ DEFAULTS = dict(
     recover_spike_guard=True, recover_hours_only=True,
     rec_max_legs=1, rec_sr='', rec_sr_tol=0.3, rec_sr_n=24, rec_sr_reject=False, rec_sr_round=10.0,
     commission_per_lot_side=3.0, leverage=100.0, contract=100.0,
-    use_ldn=False, ldn_start=3, ldn_end=9, ldn_close=21, ldn_tp=1.0, ldn_lot_mult=0.5, ldn_against_mult=1.0, ldn_risk_pct=0.0, ldn_be_at=0.0, ldn_sl_mult=1.0, ldn_last_entry=19, ldn_min_rng_atr=0.0, ldn_max_rng_atr=99.0, ldn_min_rng_d1=0.0, ldn_max_rng_d1=99.0, ldn_buffer_atr=0.0, ldn_stop_entry=False, ldn_stop_on_ask=False, ldn_fill_at_level=False, ldn_be_lock=0.05, ldn_sar=False,
+    use_ldn=False, ldn_start=3, ldn_end=9, ldn_close=21, ldn_tp=1.0, ldn_lot_mult=0.5, ldn_against_mult=1.0, ldn_risk_pct=0.0, ldn_be_at=0.0, ldn_sl_mult=1.0, ldn_last_entry=19, ldn_min_rng_atr=0.0, ldn_max_rng_atr=99.0, ldn_min_rng_d1=0.0, ldn_max_rng_d1=99.0, ldn_buffer_atr=0.0, ldn_stop_entry=False, ldn_stop_on_ask=False, ldn_fill_at_level=False, ldn_be_lock=0.05, ldn_sar=False, ldn_max_minlot_risk=0.0,
     dd_throttle_pct=0.0, dd_throttle_mult=0.5, month_stop_pct=0.0, withdraw_pct=0.0,
     use_trend=False, tr_n=55, tr_sl_atr=3.0, tr_trail_atr=4.0, tr_risk_pct=0.5, tr_max_minlot_risk=0.0, tr_safe_hours=False,
     use_night=False, night_entry_min=65, night_exit_min=240, night_skip_monday=True, night_lot_mult=1.0, night_sl_pct=1.0, night_min_prev_pct=0.0, night_quiet_mult=0.0, night_after_loss_mult=1.0, ldn_skip_from=99, ldn_skip_to=99,
@@ -871,6 +871,10 @@ class Sim:
             if lot < 0.01 - 1e-9 and P['ldn_against_mult'] == 0:
                 return
         lot = max(0.01, math.floor(lot / 0.01 + 1e-9) * 0.01)
+        if P['ldn_max_minlot_risk'] > 0 and lot <= 0.01 + 1e-9:
+            # small account: the min lot is bigger than the sizing rule wants -> skip if its stop costs too much
+            if P['ldn_sl_mult'] * rng * P['contract'] * 0.01 > self.equity(bid, ask) * P['ldn_max_minlot_risk'] / 100.0:
+                return
         self.open_pos('L1', d == 1, lot, entry, round(entry - d * P['ldn_sl_mult'] * rng, 2), round(entry + d * P['ldn_tp'] * rng, 2), t, rng)
 
     def open_trade(self, d, tag, bid, ask, t, a):
