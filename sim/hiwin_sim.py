@@ -47,6 +47,7 @@ DEFAULTS = dict(
     use_swing=False, sw_n=120, sw_sl_pct=0.45, sw_tp_pct=3.0, sw_be_pct=0.15, sw_be_lock_pct=0.02, sw_buf=0.2,
     sw_risk_pct=0.5, sw_max_minlot_risk=2.0, sw_stack=1, sw_both=True,
     ldn_rec_at=0.0, ldn_rec_tp=0.0, ldn_rec_mult=1.0,
+    brain_n=0, brain_low=0.5, brain_high=1.0, brain_min_fill=0.5, sc_pause_h=0.0,
     night_hold_h=0.0, night_hold_lock_pct=0.0, ldn_hold_h=0.0, ldn_hold_lock=0.0,
     sw_min_width_pct=0.0, sw_max_width_pct=99.0,
     use_sw2=False, sw2_n=96, sw2_sl_pct=0.45, sw2_tp_pct=0.5, sw2_be_pct=0.15, sw2_risk_pct=0.25,
@@ -264,7 +265,26 @@ class Sim:
     def _comm(self, lots):
         return lots * self.p['commission_per_lot_side']
 
+    @staticmethod
+    def _family(tag):
+        return 'SC' if tag in ('S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S0', 'R') else \
+               'L1' if tag in ('L1', 'RL') else 'X1' if tag in ('X1', 'X2') else tag
+
+    def brain_mult(self, tag):
+        """Learning layer: each engine family keeps its last brain_n results (per 0.01 lot).
+        Losing streak -> trade it at brain_low x size; winning -> brain_high x."""
+        P = self.p
+        q = self.brain.get(self._family(tag))
+        if not q or len(q) < P['brain_n'] * P['brain_min_fill']:
+            return 1.0
+        sm = sum(q)
+        return P['brain_low'] if sm < 0 else P['brain_high']
+
     def open_pos(self, tag, buy, lots, price, sl, tp, t, atr_e, parent=0):
+        if self.p['brain_n'] > 0 and tag not in ('R', 'RL'):
+            m = self.brain_mult(tag)
+            if m != 1.0:
+                lots = max(0.01, math.floor(lots * m / 0.01 + 1e-9) * 0.01)
         self.nid += 1
         self.balance -= self._comm(lots)
         x = Pos(self.nid, tag, buy, lots, price, sl, tp, t, atr_e, parent)
@@ -279,6 +299,15 @@ class Sim:
         self.peak = max(self.peak, self.balance)
         if x.tag == 'L1' and why == 'sl':
             self.ldn_stop = (x.t_open // 86400, 1 if x.buy else -1)
+        if self.p['brain_n'] > 0:
+            import collections as _c
+            fam = self._family(x.tag)
+            if fam not in self.brain:
+                self.brain[fam] = _c.deque(maxlen=self.p['brain_n'])
+            self.brain[fam].append((g - 2 * self._comm(x.lots)) / x.lots * 0.01)
+        if self.p['sc_pause_h'] > 0 and x.tag in ('S1', 'S4', 'S5', 'S6', 'R') and why in ('sl', 'time') \
+                and g < 0:
+            self.sc_pause_until = max(self.sc_pause_until, t + self.p['sc_pause_h'] * 3600)
         self.trades.append(Trade(x.id, x.tag, x.buy, x.lots, x.op, price, x.t_open, t,
                                  g - 2 * self._comm(x.lots), why, x.atr_e, x.parent, x.mae, x.mfe))
 
@@ -298,6 +327,8 @@ class Sim:
         self.sw_pend = []
         self.sw_k = -1
         self.sw2_pend = []
+        self.brain = {}
+        self.sc_pause_until = 0
         self.sw2_k = -1
         self.gap_tick = False
         self.ldn_stop = None      # (day, dir) of today's stopped London trade
@@ -617,6 +648,8 @@ class Sim:
         if orig + len(self.pend) >= P['max_positions']:
             return
         if not (P['scalp_from'] <= sh < P['scalp_to']) or sh in P['scalp_block']:
+            return
+        if t < self.sc_pause_until:      # crisis layer: scalper paused after a group closed at a loss
             return
         if P['scalp_block_min']:      # (from_min, to_min) windows of the server day, e.g. US data at 15:30
             mm = (sig_t % 86400) // 60
