@@ -28,12 +28,12 @@
 |---|---|---|---|---|
 | 895781 | IFCMarkets-Demo, `XAUUSD` (spread ~46 pts) | ~$5,031 | -1 (server 1h behind Vantage) | Amsterdam |
 | 26453869 | VantageMarkets-Demo, `XAUUSD+` (spread ~10 pts) | ~$959 | 0 | Ashburn |
-- Live log: 23-24 Nov all good (IFC +140, Vantage +115). 25 Nov gold -3.5% then +4% reversal: two sell scalp groups stopped -> IFC -609.81 (-11.8%, balance 4,561.94), Vantage -128 (-11.9%, 947.04). Tester v45.7 had 3 such days (<= -10%) in 4 years (log section 63).
+- Live log: 23-24 Nov all good (IFC +140, Vantage +115). 25 Nov gold -3.5% then +4% reversal: two sell scalp groups stopped -> IFC -609.81 (-11.8%, balance 4,561.94), Vantage -128 (-11.9%, 947.04). Tester v45.7 had 3 such days (<= -10%) in 4 years (log section 63). Simulator reproduces the live Vantage trades of 23-25 Nov almost one for one (log 67). Deep study: no pre-entry signature for such losses; filters and reverse-after-stop rejected (log 66-67).
 - VPS auto-renew is OFF (about $15/month each). Hourly push "HiWin alive" from each.
 - Next step agreed with the user: 2-4 weeks of demo, weekly account reports (History > right click > Report > HTML) compared trade by trade with the simulator. Then a real account of at least $5,000 on one broker (likely Vantage), no withdrawals for 3 months, then 30% of each winning month's profit, never touch capital, 6 months of living costs kept outside.
 
 ## Tools in this repo
-- `data/xauusd_plus_m1_2023_2026.npz` — Vantage XAUUSD+ M1 bid + spread, 2023-01-03 .. 2026-11-20 (load with `sim.data.load_npz`).
+- `data/xauusd_plus_m1_2023_2026.npz` — Vantage XAUUSD+ M1 bid + spread, 2023-01-03 .. 2026-11-26 01:15 (extended 2026-11-26; tick volume in `data/xauusd_plus_m1_tickvol.npz`) (load with `sim.data.load_npz`).
 - `sim/hiwin_sim.py` — event simulator of the EA, calibrated against the MT5 tester (about 99% of trades matched, yearly profit within ~5%). v45.2 parameters:
   `dict(use_b1=False, atr_hard_min_pct=0.14, recover_tp_atr=0.0, use_ldn=True, use_s4=True, use_trend=True, tr_risk_pct=0.25, ldn_sl_mult=1.75, sl_atr=7.0, tr_max_minlot_risk=1.0, use_night=True, night_sl_pct=0.5, night_min_prev_pct=1.0, night_lot_mult=1.0)`
 - `python3 -m sim.account_run data/xauusd_plus_m1_2023_2026.npz "[('name', {params})]"` — full account ($5,000 default, `deposit=`), money by year and month.
