@@ -28,6 +28,7 @@
 |---|---|---|---|---|
 | 895781 | IFCMarkets-Demo, `XAUUSD` (spread ~46 pts) | ~$5,031 | -1 (server 1h behind Vantage) | Amsterdam |
 | 26453869 | VantageMarkets-Demo, `XAUUSD+` (spread ~10 pts) | ~$959 | 0 | Ashburn |
+- Live log: 23-24 Nov all good (IFC +140, Vantage +115). 25 Nov gold -3.5% then +4% reversal: two sell scalp groups stopped -> IFC -609.81 (-11.8%, balance 4,561.94), Vantage -128 (-11.9%, 947.04). Tester v45.7 had 3 such days (<= -10%) in 4 years (log section 63).
 - VPS auto-renew is OFF (about $15/month each). Hourly push "HiWin alive" from each.
 - Next step agreed with the user: 2-4 weeks of demo, weekly account reports (History > right click > Report > HTML) compared trade by trade with the simulator. Then a real account of at least $5,000 on one broker (likely Vantage), no withdrawals for 3 months, then 30% of each winning month's profit, never touch capital, 6 months of living costs kept outside.
 
