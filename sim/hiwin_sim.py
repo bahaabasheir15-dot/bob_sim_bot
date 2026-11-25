@@ -47,6 +47,7 @@ DEFAULTS = dict(
     use_swing=False, sw_n=120, sw_sl_pct=0.45, sw_tp_pct=3.0, sw_be_pct=0.15, sw_be_lock_pct=0.02, sw_buf=0.2,
     sw_risk_pct=0.5, sw_max_minlot_risk=2.0, sw_stack=1, sw_both=True,
     ldn_rec_at=0.0, ldn_rec_tp=0.0, ldn_rec_mult=1.0,
+    rev_on_sl=False, rev_tp_pct=3.0, rev_risk_pct=0.5,
     block_leg_dir=0, block_adv_atr=0.0,
     brain_n=0, brain_low=0.5, brain_high=1.0, brain_min_fill=0.5, sc_pause_h=0.0,
     night_hold_h=0.0, night_hold_lock_pct=0.0, ldn_hold_h=0.0, ldn_hold_lock=0.0,
@@ -306,6 +307,15 @@ class Sim:
             if fam not in self.brain:
                 self.brain[fam] = _c.deque(maxlen=self.p['brain_n'])
             self.brain[fam].append((g - 2 * self._comm(x.lots)) / x.lots * 0.01)
+        if self.p['rev_on_sl'] and x.tag in ('S1', 'S4', 'S5', 'S6') and why == 'sl' and not self.locked:
+            # the scalp group was run over: ride the move it lost to (engine X management: BE + far target)
+            P = self.p
+            d = -1 if x.buy else 1
+            sld = price * P['sw_sl_pct'] / 100.0
+            lot = self.equity(price, price) * P['rev_risk_pct'] / 100.0 / (sld * P['contract'])
+            lot = max(0.01, min(math.floor(lot / 0.01 + 1e-9) * 0.01, P['max_lot']))
+            self.open_pos('X1', d == 1, lot, price, round(price - d * sld, 2),
+                          round(price + d * price * P['rev_tp_pct'] / 100.0, 2), t, sld)
         if self.p['sc_pause_h'] > 0 and x.tag in ('S1', 'S4', 'S5', 'S6', 'R') and why in ('sl', 'time') \
                 and g < 0:
             self.sc_pause_until = max(self.sc_pause_until, t + self.p['sc_pause_h'] * 3600)
