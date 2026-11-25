@@ -47,6 +47,7 @@ DEFAULTS = dict(
     use_swing=False, sw_n=120, sw_sl_pct=0.45, sw_tp_pct=3.0, sw_be_pct=0.15, sw_be_lock_pct=0.02, sw_buf=0.2,
     sw_risk_pct=0.5, sw_max_minlot_risk=2.0, sw_stack=1, sw_both=True,
     ldn_rec_at=0.0, ldn_rec_tp=0.0, ldn_rec_mult=1.0,
+    block_leg_dir=0, block_adv_atr=0.0,
     brain_n=0, brain_low=0.5, brain_high=1.0, brain_min_fill=0.5, sc_pause_h=0.0,
     night_hold_h=0.0, night_hold_lock_pct=0.0, ldn_hold_h=0.0, ldn_hold_lock=0.0,
     sw_min_width_pct=0.0, sw_max_width_pct=99.0,
@@ -1039,6 +1040,17 @@ class Sim:
 
     def open_trade(self, d, tag, bid, ask, t, a):
         P = self.p
+        if P['block_leg_dir']:
+            # a scalp group already has a recovery leg (price ran 2 ATR against it): no new scalp that way
+            legs = [x for x in self.pos if x.tag == 'R']
+            if any((x.buy == (d == 1)) or P['block_leg_dir'] == 2 for x in legs):
+                return
+        if P['block_adv_atr'] > 0:
+            for x in self.pos:
+                if x.tag in ('S1', 'S4', 'S5', 'S6') and x.buy == (d == 1):
+                    adv = (x.op - bid) if x.buy else (ask - x.op)
+                    if adv >= P['block_adv_atr'] * x.atr_e:
+                        return
         spread = ask - bid
         if spread > a * P['max_spread_atr']:
             return
