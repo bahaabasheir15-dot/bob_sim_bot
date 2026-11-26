@@ -47,7 +47,7 @@ DEFAULTS = dict(
     use_swing=False, sw_n=120, sw_sl_pct=0.45, sw_tp_pct=3.0, sw_be_pct=0.15, sw_be_lock_pct=0.02, sw_buf=0.2,
     sw_risk_pct=0.5, sw_max_minlot_risk=2.0, sw_stack=1, sw_both=True,
     ldn_rec_at=0.0, ldn_rec_tp=0.0, ldn_rec_mult=1.0,
-    max_same_dir=0, harvest=False, harvest_min_pct=0.0, harvest_need_leg=True,
+    max_same_dir=0, harvest=False, harvest_min_pct=0.0, harvest_need_leg=True, harvest_adv_atr=0.0,
     rev_on_sl=False, rev_tp_pct=3.0, rev_risk_pct=0.5,
     block_leg_dir=0, block_adv_atr=0.0,
     brain_n=0, brain_low=0.5, brain_high=1.0, brain_min_fill=0.5, sc_pause_h=0.0,
@@ -434,7 +434,11 @@ class Sim:
             # day basket: if today's closed profit (London, night, scalps...) already pays for the stuck
             # scalp baskets, close those baskets now and keep the rest of the day's profit
             sc = [x for x in self.pos if x.tag in ('S1', 'S4', 'S5', 'S6', 'R')]
-            if sc and (not P['harvest_need_leg'] or any(x.tag == 'R' for x in sc)):
+            trig = any(x.tag == 'R' for x in sc)
+            if P['harvest_adv_atr'] > 0:      # or: a scalp original already this far against us (leg blocked or not)
+                trig = trig or any(((x.op - bid) if x.buy else (ask - x.op)) >= P['harvest_adv_atr'] * x.atr_e
+                                   for x in sc if x.tag != 'R')
+            if sc and (not P['harvest_need_leg'] or trig):
                 fl = sum(((bid - x.op) if x.buy else (x.op - ask)) * x.lots * P['contract'] for x in sc)
                 if fl < 0 and (self.balance - self.day_start) + fl >= self.day_start * P['harvest_min_pct'] / 100.0:
                     for x in list(sc):
