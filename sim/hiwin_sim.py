@@ -287,6 +287,8 @@ class Sim:
     def open_pos(self, tag, buy, lots, price, sl, tp, t, atr_e, parent=0):
         if self.p['brain_n'] > 0 and tag not in ('R', 'RL'):
             m = self.brain_mult(tag)
+            if m <= 0:
+                return None              # brain_low = 0: this engine is in a losing run -> skip the trade
             if m != 1.0:
                 lots = max(0.01, math.floor(lots * m / 0.01 + 1e-9) * 0.01)
         self.nid += 1
