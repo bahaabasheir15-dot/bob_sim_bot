@@ -55,6 +55,12 @@ DEFAULTS = dict(
     night_hold_h=0.0, night_hold_lock_pct=0.0, ldn_hold_h=0.0, ldn_hold_lock=0.0,
     sw_min_width_pct=0.0, sw_max_width_pct=99.0,
     use_sw2=False, sw2_n=96, sw2_sl_pct=0.45, sw2_tp_pct=0.5, sw2_be_pct=0.15, sw2_risk_pct=0.25,
+    rh_sc_at=0.0, rh_sc_mult=1.0, rh_sc_sl=2.0, rh_sc_tp=0.0,
+    rh_l1_at=0.0, rh_l1_mult=1.0, rh_l1_sl=0.5, rh_l1_tp=0.0,
+    rh_x1_at=0.0, rh_x1_mult=1.0, rh_x1_sl=0.2, rh_x1_tp=0.0,
+    rh_n1_at=0.0, rh_n1_mult=1.0, rh_n1_sl=0.2, rh_n1_tp=0.0,
+    rh_keep=False, rh_keep_lock=0.1, rh_trend=False, rh_adx=0.0,
+    rb_mult=1.0, rb_fams=('L1', 'X1'),
     deposit=5000.0,
 )
 
@@ -291,6 +297,11 @@ class Sim:
                 return None              # brain_low = 0: this engine is in a losing run -> skip the trade
             if m != 1.0:
                 lots = max(0.01, math.floor(lots * m / 0.01 + 1e-9) * 0.01)
+        if self.p['rb_mult'] != 1.0 and tag not in ('R', 'RL', 'H'):
+            # rebound sizing: the engine's last closed trade lost -> its next trade is rb_mult x size
+            fam = self._family(tag)
+            if fam in self.p['rb_fams'] and self.rb_last.get(fam, 0.0) < 0:
+                lots = max(0.01, math.floor(lots * self.p['rb_mult'] / 0.01 + 1e-9) * 0.01)
         self.nid += 1
         self.balance -= self._comm(lots)
         x = Pos(self.nid, tag, buy, lots, price, sl, tp, t, atr_e, parent)
@@ -303,6 +314,16 @@ class Sim:
         self.balance += g - self._comm(x.lots)
         self.pos.remove(x)
         self.peak = max(self.peak, self.balance)
+        if why == 'sl' and x.tag != 'H':
+            for h in self.pos:
+                if h.tag == 'H' and h.parent == x.id:
+                    h.psl = True
+        if self.p['rb_mult'] != 1.0 and x.tag not in ('R', 'RL', 'H'):
+            fam = self._family(x.tag)
+            if fam == 'SC':
+                self.rb_last[fam] = g + sum(t_.net for t_ in self.trades[-3:] if t_.parent == x.id)
+            else:
+                self.rb_last[fam] = g
         if x.tag == 'L1' and why == 'sl':
             self.ldn_stop = (x.t_open // 86400, 1 if x.buy else -1)
         if self.p['brain_n'] > 0:
@@ -343,6 +364,9 @@ class Sim:
         self.sw_k = -1
         self.sw2_pend = []
         self.brain = {}
+        self.rh_done = set()
+        self.rb_last = {}
+        self.rh_on = any(P['rh_%s_at' % f] > 0 for f in ('sc', 'l1', 'x1', 'n1'))
         self.sc_pause_until = 0
         self.lock_day = None
         self.lock_peak = 0.0
@@ -492,7 +516,7 @@ class Sim:
                         self.close_pos(x, bid if x.buy else ask, t, 'be_time')
             # ---- time stop (not B1)
             for x in list(self.pos):
-                if x.tag not in ('B1', 'L1', 'T1', 'N1', 'X1', 'X2', 'RL') and t - x.t_open >= P['time_stop_bars'] * 300:
+                if x.tag not in ('B1', 'L1', 'T1', 'N1', 'X1', 'X2', 'RL', 'H') and t - x.t_open >= P['time_stop_bars'] * 300:
                     self.close_pos(x, bid if x.buy else ask, t, 'time')
             # ---- engine L closes at its hour
             if P['use_ldn'] and P['ldn_rec_at'] > 0:
@@ -548,6 +572,8 @@ class Sim:
                         x.sl = want
             # ---- recovery
             self.manage_recovery(bid, ask, t)
+            if self.rh_on:
+                self.manage_rescue(bid, ask, t)
         # ---- pendings
         if self.pend:
             shut = self.locked or self.is_holiday(t) or not self.in_window(t)
@@ -574,7 +600,7 @@ class Sim:
         if P['recover_spike_guard'] and self.k_loaded > 0 and self.spike_now(self.k_loaded):
             return
         for x in list(self.pos):
-            if x.tag in ('R', 'B1', 'L1', 'T1', 'N1', 'X1', 'X2', 'RL'):
+            if x.tag in ('R', 'B1', 'L1', 'T1', 'N1', 'X1', 'X2', 'RL', 'H'):
                 continue
             legs = [y for y in self.pos if y.tag == 'R' and y.parent == x.id]
             if len(legs) >= P['rec_max_legs']:
@@ -614,6 +640,71 @@ class Sim:
             x.sl = gsl
             for y in legs:
                 y.tp = tp
+
+    def manage_rescue(self, bid, ask, t):
+        """RESCUE layer: when a trade of an engine is rh_<fam>_at units against it, open an opposite
+        trade 'H' (rides the move that hurts the parent). Units: SC = entry ATR, L1 = Asian range,
+        X1/N1 = % of price. H stop = rh_sl units back (price returning = parent recovering), target =
+        the parent's stop (rh_tp=0) or rh_tp units. H is closed when the parent closes, unless rh_keep
+        and the parent was stopped: then H runs on with its stop at break-even + lock."""
+        P = self.p
+        ids = {x.id: x for x in self.pos}
+        for h in [x for x in self.pos if x.tag == 'H']:
+            if h.parent in ids:
+                continue
+            if getattr(h, 'free', False):
+                continue
+            px = bid if h.buy else ask
+            pnl = (px - h.op) if h.buy else (h.op - px)
+            if P['rh_keep'] and getattr(h, 'psl', False) and pnl > 0:
+                h.free = True
+                d = 1 if h.buy else -1
+                ns = round(h.op + d * P['rh_keep_lock'] * h.atr_e, 2)
+                if (ns - h.sl) * d > 0 and (px - ns) * d > 0:
+                    h.sl = ns
+                continue
+            self.close_pos(h, px, t, 'rh_orphan')
+        if self.locked:
+            return
+        for x in list(self.pos):
+            tg = x.tag
+            fam = 'sc' if tg in ('S1', 'S4', 'S5', 'S6') else 'l1' if tg == 'L1' else 'x1' if tg == 'X1' \
+                else 'n1' if tg == 'N1' else None
+            if fam is None or x.id in self.rh_done:
+                continue
+            at = P['rh_%s_at' % fam]
+            if at <= 0:
+                continue
+            u = x.atr_e if fam in ('sc', 'l1') else x.op / 100.0
+            adv = (x.op - bid) if x.buy else (ask - x.op)
+            if adv < at * u:
+                continue
+            self.rh_done.add(x.id)
+            lots = x.lots + sum(y.lots for y in self.pos if y.tag == 'R' and y.parent == x.id)
+            lot = math.floor(lots * P['rh_%s_mult' % fam] / 0.01 + 1e-9) * 0.01
+            if lot < 0.01:
+                continue
+            d = -1 if x.buy else 1
+            if P['rh_trend'] or P['rh_adx'] > 0:
+                j = np.searchsorted(self.h1t, t, side='right') - 2
+                if P['rh_trend'] and d * (self.h1e50[j] - self.h1e200[j]) <= 0:
+                    continue
+                if P['rh_adx'] > 0 and self.k_loaded > 0 and self.adx[self.k_loaded - 1] < P['rh_adx']:
+                    continue
+            px = ask if d == 1 else bid
+            sl = round(px - d * P['rh_%s_sl' % fam] * u, 2)
+            tpu = P['rh_%s_tp' % fam]
+            if tpu > 0:
+                tp = round(px + d * tpu * u, 2)
+            elif x.sl > 0:
+                tp = x.sl
+            else:
+                tp = 0.0
+            if tp and (tp - px) * d <= 0:
+                continue
+            h = self.open_pos('H', d == 1, lot, px, sl, tp, t, u, parent=x.id)
+            if h is not None:
+                h.fam = fam
 
     def at_level(self, buy, bid, ask, t, a, op):
         """Signal-based averaging: add the recovery leg only when price stands at a support (buy) /
@@ -691,7 +782,7 @@ class Sim:
         # ---- engine L
         if P['use_ldn'] and not P['ldn_stop_entry']:
             self.check_london(bid, ask, t, k)
-        orig = sum(1 for x in self.pos if x.tag not in ('R', 'B1', 'L1', 'T1', 'N1', 'X1', 'X2', 'RL'))
+        orig = sum(1 for x in self.pos if x.tag not in ('R', 'B1', 'L1', 'T1', 'N1', 'X1', 'X2', 'RL', 'H'))
         if orig + len(self.pend) >= P['max_positions']:
             return
         if not (P['scalp_from'] <= sh < P['scalp_to']) or sh in P['scalp_block']:
