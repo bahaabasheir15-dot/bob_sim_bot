@@ -56,8 +56,8 @@ Tighter group stop, removing the recovery leg, break-even moves, second-chance r
 - **Gold Beaver** (MQL5 market product 177869, seller signal "القندس الذهبي" 27 weeks live, PF 7.66, copy $999/month — do not copy the signal): H4 swing high/low breakout stop orders refreshed every 4 h, two sets [A] (SL ~0.25-0.5%, TP ~0.4%) and [B] (SL ~0.9%, TP ~4%), instant break-even, stacks up to 6 orders. User tester Vantage 2023-2026, $5,000, Mode=15, Inp_Lot_Percent=11.6: +635,965, PF 6.8, positive every year (+1,298 / +4,081 / +42,788 / +586,832), worst month -6.4%, DD ~21% (2023). Top 50 trades = 93% of profit. Monthly correlation with v45.3 0.50; a 50/50 split cuts the monthly drawdown to 4.5% and makes 2023 +12% (log sections 45-46). Next: separate $5,000 Vantage demo, tester at lower risk and with IFC spread.
 - **ALLYLLA Pullback Bot**: lost in 2023, correlation 0.83 with ours — not a useful companion.
 
-## Automatic research
-A scheduled job (trigger `trig_0126ag9zXpizb4C1oneAWY1z`, every 2 hours) was set up and then DISABLED at the user's request on 2026-11-20. If re-enabled, it follows `research/PROTOCOL.md`: one idea from `research/IDEAS.md` per run, results in `research/RESULTS_AR.md` (Arabic). Read those files to see what it found.
+## Automatic research (research team, set up 2026-11-26 at the user's request)
+Three nightly scheduled tasks (fresh session each), Cairo time: track A `trig_0126ag9zXpizb4C1oneAWY1z` 01:17 (turn losses into profit), track B `trig_01EoVbLBNe8WiX2G7oX4nwnF` 02:43 (keep profit / lower DD), track C `trig_01BVM9JZsTyKyZQXyeBLd8eq` 04:11 (win rate without lower profit). Each follows `research/PROTOCOL.md` (baseline v45.7) with its queue `research/TRACK_*.md`, writes `research/RESULTS_AR.md` (Arabic) and one line in `research/results.jsonl`. A morning task `trig_016SphwyxAw2AcZkFB8wJVxB` (07:41 Cairo, into the main session) rebuilds `research/board.json` and updates the dashboard https://claude.ai/artifact/3e2G7izQmCXjxyJxMGUJ1p, then summarises the night for the user.
 
 ## Git
 Work on branch `claude/bot-analysis-optimization-82i7f1`; commit and push there.
