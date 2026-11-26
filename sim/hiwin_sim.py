@@ -47,6 +47,7 @@ DEFAULTS = dict(
     use_swing=False, sw_n=120, sw_sl_pct=0.45, sw_tp_pct=3.0, sw_be_pct=0.15, sw_be_lock_pct=0.02, sw_buf=0.2,
     sw_risk_pct=0.5, sw_max_minlot_risk=2.0, sw_stack=1, sw_both=True,
     ldn_rec_at=0.0, ldn_rec_tp=0.0, ldn_rec_mult=1.0,
+    lock_trigger_pct=0.0, lock_keep=0.65, lock_all=False,
     max_same_dir=0, harvest=False, harvest_min_pct=0.0, harvest_need_leg=True, harvest_adv_atr=0.0,
     rev_on_sl=False, rev_tp_pct=3.0, rev_risk_pct=0.5,
     block_leg_dir=0, block_adv_atr=0.0,
@@ -341,6 +342,9 @@ class Sim:
         self.sw2_pend = []
         self.brain = {}
         self.sc_pause_until = 0
+        self.lock_day = None
+        self.lock_peak = 0.0
+        self.lock_hit = None
         self.sw2_k = -1
         self.gap_tick = False
         self.ldn_stop = None      # (day, dir) of today's stopped London trade
@@ -430,6 +434,22 @@ class Sim:
             self.locked = True
         if P['use_night']:
             self.manage_night(bid, ask, t)
+        if P['lock_trigger_pct'] > 0:
+            # profit-lock floor: once today's result reaches the trigger, never let it fall below
+            # lock_keep x its best level - close the scalp baskets (or everything) and stop scalping today
+            d0 = t // 86400
+            if self.lock_day != d0:
+                self.lock_day, self.lock_peak = d0, 0.0
+            fl = sum(((bid - x.op) if x.buy else (x.op - ask)) * x.lots * P['contract'] for x in self.pos)
+            today = (self.balance - self.day_start) + fl
+            self.lock_peak = max(self.lock_peak, today)
+            if self.lock_peak >= self.day_start * P['lock_trigger_pct'] / 100.0 and today < self.lock_peak * P['lock_keep']:
+                tags = None if P['lock_all'] else ('S1', 'S4', 'S5', 'S6', 'R')
+                for x in list(self.pos):
+                    if tags is None or x.tag in tags:
+                        self.close_pos(x, bid if x.buy else ask, t, 'lock')
+                self.lock_hit = d0
+                self.sc_pause_until = max(self.sc_pause_until, (d0 + 1) * 86400)
         if P['harvest'] and self.pos:
             # day basket: if today's closed profit (London, night, scalps...) already pays for the stuck
             # scalp baskets, close those baskets now and keep the rest of the day's profit
