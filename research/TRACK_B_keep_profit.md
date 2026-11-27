@@ -2,7 +2,7 @@
 Status: TODO / IN PROGRESS (time) / ACCEPTED / REJECTED (reason). Already rejected: drawdown throttle, monthly stop,
 volatility-regime model, ML trade filter, profit-lock floor (cut 2025/26), allocation by inverse vol / momentum (log 77).
 
-1. TODO — Volatility-target lot: scale every engine's lot by (median daily ATR% of last 60 days / today's daily ATR%), clipped 0.7-1.3.
+1. REJECTED (2026-11-27: every year lower, $5k 1.48M -> 1.10M; $2k DD 23.2%) — Volatility-target lot: scale every engine's lot by (median daily ATR% of last 60 days / today's daily ATR%), clipped 0.7-1.3.
 2. TODO — News blackout: no new scalps 15:00-17:00 server on the first Friday of each month (NFP) and on US CPI days (2nd week Wed/Thu heuristic); check every year.
 3. TODO — Weekly profit keep: after the week is >= +X% (X = 4/6/8), next scalps that week at 0.5x lot.
 4. TODO — Scalper daily loss stop per engine: after 2 stopped scalp baskets in one day, no more scalps that day.
