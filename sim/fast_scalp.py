@@ -22,7 +22,7 @@ def _hours(t):
     return (t % 86400) // 3600, (t % 86400) // 60
 
 
-def run(m, sig, tp_d, sl_d, max_min, slip=0.0, sp_mult=1.0):
+def run(m, sig, tp_d, sl_d, max_min, slip=0.0, sp_mult=1.0, entry_gap=600, close_gap=600):
     """sig: +1/-1/0 per bar (decided at bar close), tp_d/sl_d: distances (price) per bar. Returns trades list."""
     bo, bh, bl, bc = m['bo'], m['bh'], m['bl'], m['bc']
     sp = (m['ac'] - m['bc']) * sp_mult
@@ -38,7 +38,7 @@ def run(m, sig, tp_d, sl_d, max_min, slip=0.0, sp_mult=1.0):
             break
         d = sig[i]
         j = i + 1
-        if t[j] - t[i] > 600:          # gap (weekend / session break): skip
+        if t[j] - t[i] > entry_gap:    # gap (weekend / session break): skip
             p += 1
             continue
         op = bo[j] + (sp[j] if d == 1 else 0.0)
@@ -63,7 +63,7 @@ def run(m, sig, tp_d, sl_d, max_min, slip=0.0, sp_mult=1.0):
                 if a_l <= tp:
                     res = (min(tp, a_o) if k > j and a_o < tp else tp, k)
                     break
-            if t[k] - t[j] >= max_min * 60 or (k + 1 < n and t[k + 1] - t[k] > 600):
+            if t[k] - t[j] >= max_min * 60 or (k + 1 < n and t[k + 1] - t[k] > close_gap):
                 res = (bc[k] if d == 1 else bc[k] + sp[k], k)
                 break
             k += 1

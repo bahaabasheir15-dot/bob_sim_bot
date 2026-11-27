@@ -66,7 +66,7 @@ def main(path):
         for rr in (2.0, 3.0):
             for near in (0.0, 1.0):
                 sig, tp, sl = signals(m, tf=tf, rr=rr, ma_near=near)
-                stats(run(m, sig, tp, sl, hold * tf), f'M{tf} rr{rr:.0f} MAnear{near:.0f}')
+                stats(run(m, sig, tp, sl, hold * tf, entry_gap=4 * 86400, close_gap=10 ** 9), f'M{tf} rr{rr:.0f} MAnear{near:.0f}')
 
 
 if __name__ == '__main__':

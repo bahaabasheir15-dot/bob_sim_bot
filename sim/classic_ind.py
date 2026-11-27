@@ -53,11 +53,11 @@ def main(path):
             for tpa, sla in ((2.0, 2.0), (3.0, 1.5), (4.0, 2.0)):
                 b, s, a = fn(m, tf)
                 sig, tp, sl = _place(m, b, s, a, tpa, sla)
-                stats(run(m, sig, tp, sl, hold * tf), f'{name} {"D1" if tf == 1440 else "H%d" % (tf // 60)} tp{tpa:g}/sl{sla:g}')
+                stats(run(m, sig, tp, sl, hold * tf, entry_gap=4 * 86400, close_gap=10 ** 9), f'{name} {"D1" if tf == 1440 else "H%d" % (tf // 60)} tp{tpa:g}/sl{sla:g}')
             for side, sn in ((1, 'BUY only'), (-1, 'SELL only')):
                 b, s, a = fn(m, tf, side=side)
                 sig, tp, sl = _place(m, b, s, a, 3.0, 1.5)
-                stats(run(m, sig, tp, sl, hold * tf), f'{name} {"D1" if tf == 1440 else "H%d" % (tf // 60)} {sn}')
+                stats(run(m, sig, tp, sl, hold * tf, entry_gap=4 * 86400, close_gap=10 ** 9), f'{name} {"D1" if tf == 1440 else "H%d" % (tf // 60)} {sn}')
 
 
 if __name__ == '__main__':
