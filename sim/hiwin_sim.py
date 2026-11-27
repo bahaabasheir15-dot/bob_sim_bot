@@ -61,6 +61,7 @@ DEFAULTS = dict(
     rh_n1_at=0.0, rh_n1_mult=1.0, rh_n1_sl=0.2, rh_n1_tp=0.0,
     rh_keep=False, rh_keep_lock=0.1, rh_trend=False, rh_adx=0.0,
     rb_mult=1.0, rb_fams=('L1', 'X1'),
+    tf_min=5,
     deposit=5000.0,
 )
 
@@ -121,7 +122,8 @@ class Sim:
     def _prep(self):
         P = self.p
         m1 = self.m1
-        b5 = resample(m1, 5)
+        self.bs = int(P['tf_min']) * 60     # scalper timeframe in seconds (EA: M5)
+        b5 = resample(m1, int(P['tf_min']))
         self.b5 = b5
         self.v5 = np.add.reduceat(m1['v'].astype(float), b5['first']) if 'v' in m1 else None
         if self.v5 is not None:     # session VWAP (server day) and its volume-weighted sd, per M5 bar
@@ -507,7 +509,7 @@ class Sim:
             if P['be_after_bars'] > 0:
                 has_leg = {y.parent for y in self.pos if y.tag == 'R'}
                 for x in list(self.pos):
-                    if x.tag not in ('S1', 'S4', 'S5') or t - x.t_open < P['be_after_bars'] * 300:
+                    if x.tag not in ('S1', 'S4', 'S5') or t - x.t_open < P['be_after_bars'] * self.bs:
                         continue
                     if P['be_scope'] == 'orig' and x.id in has_leg:
                         continue
@@ -516,7 +518,7 @@ class Sim:
                         self.close_pos(x, bid if x.buy else ask, t, 'be_time')
             # ---- time stop (not B1)
             for x in list(self.pos):
-                if x.tag not in ('B1', 'L1', 'T1', 'N1', 'X1', 'X2', 'RL', 'H') and t - x.t_open >= P['time_stop_bars'] * 300:
+                if x.tag not in ('B1', 'L1', 'T1', 'N1', 'X1', 'X2', 'RL', 'H') and t - x.t_open >= P['time_stop_bars'] * self.bs:
                     self.close_pos(x, bid if x.buy else ask, t, 'time')
             # ---- engine L closes at its hour
             if P['use_ldn'] and P['ldn_rec_at'] > 0:
@@ -578,7 +580,7 @@ class Sim:
         if self.pend:
             shut = self.locked or self.is_holiday(t) or not self.in_window(t)
             for o in list(self.pend):
-                if shut or t - o.t_setup >= max(1, P['limit_wait_bars']) * 300:
+                if shut or t - o.t_setup >= max(1, P['limit_wait_bars']) * self.bs:
                     self.pend.remove(o)
         if P['use_ldn'] and P['ldn_stop_entry'] and k >= 600 and not self.locked and not self.is_holiday(t):
             self.check_london(bid, ask, t, k, tick=True)
@@ -756,7 +758,7 @@ class Sim:
         h5, l5, c5 = self.b5['h'], self.b5['l'], self.b5['c']
         # ---- engine B
         if P['use_b1'] and sum(1 for x in self.pos if x.tag == 'B1') < P['b_max_pos']:
-            cooled = (self.b5['t'][k] - self.last_break) >= P['b_cooldown'] * 300
+            cooled = (self.b5['t'][k] - self.last_break) >= P['b_cooldown'] * self.bs
             if cooled:
                 avg = self.atr_avg50[k]
                 d = 0
@@ -925,7 +927,7 @@ class Sim:
                 if self.v5[k - 1] < P['s6_volx'] * self.v5[k - 21:k - 1].mean():
                     d = 0
             if d != 0 and P['s6_dayext']:          # the run made the day's high (sell) / low (buy)
-                n0 = int((self.b5['t'][k - 1] % 86400) // 300) + 1
+                n0 = int((self.b5['t'][k - 1] % 86400) // self.bs) + 1
                 if d == -1 and h5[k - 1 - nb:k].max() < h5[k - n0:k].max() - 1e-9:
                     d = 0
                 if d == 1 and l5[k - 1 - nb:k].min() > l5[k - n0:k].min() + 1e-9:
