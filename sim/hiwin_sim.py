@@ -54,6 +54,7 @@ DEFAULTS = dict(
     brain_n=0, brain_low=0.5, brain_high=1.0, brain_min_fill=0.5, sc_pause_h=0.0,
     night_hold_h=0.0, night_hold_lock_pct=0.0, ldn_hold_h=0.0, ldn_hold_lock=0.0,
     sw_min_width_pct=0.0, sw_max_width_pct=99.0,
+    sw_struct_n=0, sw_struct_min=0.3, sw_struct_max=0.7, sw_struct_buf=0.2,
     use_sw2=False, sw2_n=96, sw2_sl_pct=0.45, sw2_tp_pct=0.5, sw2_be_pct=0.15, sw2_risk_pct=0.25,
     rh_sc_at=0.0, rh_sc_mult=1.0, rh_sc_sl=2.0, rh_sc_tp=0.0,
     rh_l1_at=0.0, rh_l1_mult=1.0, rh_l1_sl=0.5, rh_l1_tp=0.0,
@@ -1006,6 +1007,12 @@ class Sim:
                 sp = ask - bid
                 op = (max(ask, lv + sp) if d == 1 else min(bid, lv)) if self.gap_tick else (lv + sp if d == 1 else lv)
                 sld = op * P['sw_sl_pct'] / 100.0
+                if P['sw_struct_n'] > 0 and not second:
+                    kk = self.sw_k; m = int(P['sw_struct_n'])
+                    if kk > m:
+                        ref = (self.h4l[kk - m:kk].min() - P['sw_struct_buf']) if d == 1 else (self.h4h[kk - m:kk].max() + P['sw_struct_buf'])
+                        dist = (op - ref) * d
+                        sld = min(max(dist, op * P['sw_struct_min'] / 100.0), op * P['sw_struct_max'] / 100.0)
                 lpl = sld * P['contract']
                 eq = self.equity(bid, ask)
                 lot = eq * P['sw_risk_pct'] / 100.0 / lpl
