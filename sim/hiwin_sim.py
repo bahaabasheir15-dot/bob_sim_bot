@@ -54,6 +54,7 @@ DEFAULTS = dict(
     brain_n=0, brain_low=0.5, brain_high=1.0, brain_min_fill=0.5, sc_pause_h=0.0,
     night_hold_h=0.0, night_hold_lock_pct=0.0, ldn_hold_h=0.0, ldn_hold_lock=0.0,
     sw_min_width_pct=0.0, sw_max_width_pct=99.0,
+    sw_part_pct=0.0, sw_part_frac=0.5,
     sw_struct_n=0, sw_struct_min=0.3, sw_struct_max=0.7, sw_struct_buf=0.2,
     use_sw2=False, sw2_n=96, sw2_sl_pct=0.45, sw2_tp_pct=0.5, sw2_be_pct=0.15, sw2_risk_pct=0.25,
     rh_sc_at=0.0, rh_sc_mult=1.0, rh_sc_sl=2.0, rh_sc_tp=0.0,
@@ -81,6 +82,7 @@ class Pos:
     parent: int = 0       # recovery legs: id of the original
     mae: float = 0.0
     mfe: float = 0.0
+    nlots: float = 0.0    # lots used to normalise stats (split X1 halves report the full lot)
 
 
 @dataclass
@@ -347,7 +349,7 @@ class Sim:
         if self.p['sc_pause_h'] > 0 and x.tag in ('S1', 'S4', 'S5', 'S6', 'R') and why in ('sl', 'time') \
                 and g < 0:
             self.sc_pause_until = max(self.sc_pause_until, t + self.p['sc_pause_h'] * 3600)
-        self.trades.append(Trade(x.id, x.tag, x.buy, x.lots, x.op, price, x.t_open, t,
+        self.trades.append(Trade(x.id, x.tag, x.buy, x.nlots or x.lots, x.op, price, x.t_open, t,
                                  g - 2 * self._comm(x.lots), why, x.atr_e, x.parent, x.mae, x.mfe))
 
     # ------------------------------------------------------------------ main loop
@@ -1025,7 +1027,19 @@ class Sim:
                 if lot < 0.01 and lpl * 0.01 > eq * P['sw_max_minlot_risk'] / 100.0:
                     continue
                 lot = max(0.01, min(math.floor(lot / 0.01 + 1e-9) * 0.01, P['max_lot']))
-                self.open_pos(tag, d == 1, lot, op, round(op - d * sld, 2), round(op + d * op * P['sw_tp_pct'] / 100.0, 2), t, sld)
+                if P['sw_part_pct'] > 0 and not second:
+                    # partial: one part closes at +sw_part_pct %, the rest runs to the normal 3% target
+                    la = math.floor(lot * P['sw_part_frac'] / 0.01 + 1e-9) * 0.01
+                    if P['fixed_lot'] > 0 or la < 0.01 or lot - la < 0.01 - 1e-9:
+                        la = lot * P['sw_part_frac']     # stats-only split (fixed-lot research / too small)
+                    lb = lot - la
+                    xa = self.open_pos(tag, d == 1, la, op, round(op - d * sld, 2), round(op + d * op * P['sw_part_pct'] / 100.0, 2), t, sld)
+                    xb = self.open_pos(tag, d == 1, lb, op, round(op - d * sld, 2), round(op + d * op * P['sw_tp_pct'] / 100.0, 2), t, sld)
+                    for xx, ll in ((xa, la), (xb, lb)):
+                        if xx is not None:
+                            xx.nlots = xx.lots * lot / ll
+                else:
+                    self.open_pos(tag, d == 1, lot, op, round(op - d * sld, 2), round(op + d * op * P['sw_tp_pct'] / 100.0, 2), t, sld)
         if P['sw_be_pct'] > 0:
             for x in self.pos:
                 if x.tag != tag:
